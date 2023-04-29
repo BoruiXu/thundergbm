@@ -39,10 +39,13 @@ void Booster::init(const DataSet &dataSet, const GBMParam &param) {
     CHECK_GE(n_available_device, param.n_device) << "only " << n_available_device
                                             << " GPUs available; please set correct number of GPUs to use";
     this->param = param;
+    //fbuilder：划分节点的方法，exact或者approximate
     fbuilder.reset(FunctionBuilder::create(param.tree_method));
     fbuilder->init(dataSet, param);
+    //目标类型：回归还是分类任务
     obj.reset(ObjectiveFunction::create(param.objective));
     obj->configure(param, dataSet);
+    //loss函数类型：mse等
     metric.reset(Metric::create(obj->default_metric_name()));
     metric->configure(param, dataSet);
 
