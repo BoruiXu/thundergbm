@@ -14,6 +14,7 @@ public:
     virtual vector<Tree> build_approximate(const MSyncArray<GHPair> &gradients) = 0;
 
     virtual void init(const DataSet &dataset, const GBMParam &param) {
+        //初始化参数配置信息
         this->param = param;
     };
 

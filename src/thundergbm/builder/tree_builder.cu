@@ -78,8 +78,10 @@ void TreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     cudaGetDeviceCount(&n_available_device);
     CHECK_GE(n_available_device, param.n_device) << "only " << n_available_device
                                                  << " GPUs available; please set correct number of GPUs to use";
+    //调用父类的初始化
     FunctionBuilder::init(dataset, param);
     this->n_instances = dataset.n_instances();
+    //初始化变量
     trees = vector<Tree>(param.n_device);
     ins2node_id = MSyncArray<int>(param.n_device, n_instances);
     sp = MSyncArray<SplitPoint>(param.n_device);

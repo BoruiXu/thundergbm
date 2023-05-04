@@ -40,11 +40,14 @@ void Booster::init(const DataSet &dataSet, const GBMParam &param) {
                                             << " GPUs available; please set correct number of GPUs to use";
     this->param = param;
     //fbuilder：划分节点的方法，exact或者approximate
+    //create对类进行了初始化，fbuilder是指向该类实例的一个指针。
+    //init调用的是具体划分方法类的init，而不是基类FunctionBuilder
     fbuilder.reset(FunctionBuilder::create(param.tree_method));
     fbuilder->init(dataSet, param);
     //目标类型：回归还是分类任务
     obj.reset(ObjectiveFunction::create(param.objective));
     obj->configure(param, dataSet);
+    
     //loss函数类型：mse等
     metric.reset(Metric::create(obj->default_metric_name()));
     metric->configure(param, dataSet);

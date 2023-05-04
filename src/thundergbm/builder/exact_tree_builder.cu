@@ -340,22 +340,28 @@ void ExactTreeBuilder::update_ins2node_id() {
 }
 
 void ExactTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
+    //调用父类的初始化
     TreeBuilder::init(dataset, param);
     //TODO refactor
     //init shards
     int n_device = param.n_device;
+    //shard结构用来表示数据集的一部分，包含部分features（column），即包含所有instance的部分列
+    //每一部分放在一个GPU上
     shards = vector<Shard>(n_device);
+    //指针构成的vector，每个指针用在不同的gpu上
     vector<std::unique_ptr<SparseColumns>> v_columns(param.n_device);
     for (int i = 0; i < param.n_device; ++i) {
         v_columns[i].reset(&shards[i].columns);
         shards[i].ignored_set = SyncArray<bool>(dataset.n_features());
     }
+    //数据集转化成csc格式的数据
     SparseColumns columns;
     if(dataset.use_cpu)
         columns.csr2csc_cpu(dataset, v_columns);
     else
         columns.csr2csc_gpu(dataset, v_columns);
 
+    //释放指针，不是释放该部分内存
     for (int i = 0; i < param.n_device; ++i) {
         v_columns[i].release();
     }
