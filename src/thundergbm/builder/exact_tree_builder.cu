@@ -116,7 +116,7 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
                                     make_permutation_iterator(
                                             columns.csc_val.device_data(),
                                             fvid_new2old.device_data())));//use fvid_new2old to access csc_val
-                    
+
                     //这里的key是一个tuple，tuple(0)保证属于同一个part，同一个属性，tuple(1)保证值相同
                     n_split = reduce_by_key(
                             cuda::par,
@@ -145,8 +145,11 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
         }
 
         //calculate missing value for each partition
+        //计算每个part的missing value是因为在按照属性完成划分之后，每一个属性part并不是包含所有的instances
+        //因为有的instance可能没有该属性
         {
             TIMED_SCOPE(timerObj, "find _split - calculate missing value");
+            //pid_ptr记录每个分区的起始位置
             SyncArray<int> pid_ptr(n_partition + 1);
             counting_iterator<int> search_begin(0);
             upper_bound(cuda::par, rle_pid_data, rle_pid_data + n_split, search_begin,
@@ -157,11 +160,15 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
             auto rle_key_data = rle_key.device_data();
             float_type rt_eps = param.rt_eps;
             {
+                //fval存储非零元素的值
                 SyncArray<float_type> fval(nnz);
                 auto fval_data = fval.device_data();
+                //压缩的值
                 device_loop(n_split, [=]__device__(int i) {
                     fval_data[i] = rle_fval_data[i];
                 });
+
+                //不明白为什么这样计算
                 device_loop(n_split, [=]__device__(int i) {
                     int pid = rle_pid_data[i];
                     if (pid == INT_MAX) return;
@@ -180,6 +187,7 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
             auto missing_gh_data = missing_gh.device_data();
             device_loop(n_partition, [=]__device__(int pid) {
                 int nid = pid % n_max_nodes_in_level + nid_offset;
+                //表示在pid这部分存在数据
                 if (pid_ptr_data[pid + 1] != pid_ptr_data[pid])
                     missing_gh_data[pid] =
                             node_data[nid].sum_gh_pair - gh_prefix_sum_data[pid_ptr_data[pid + 1] - 1];
@@ -211,14 +219,16 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
             device_loop(n_split, [=]__device__(int i) {
                 int pid = rle_pid_data[i];
                 int nid0 = pid % n_max_nodes_in_level;
-                int fid = pid / n_max_nodes_in_level;
+                int fid = pid / n_max_nodes_in_level; //当前是第几个属性
                 int nid = nid0 + nid_offset;
                 if (pid != INT_MAX && !ignored_set_data[fid]) {
                     GHPair father_gh = nodes_data[nid].sum_gh_pair;
                     GHPair p_missing_gh = missing_gh_data[pid];
                     GHPair rch_gh = gh_prefix_sum_data[i];
+                    //默认将缺失的instance划到左边
                     float_type default_to_left_gain = max(0.f,
                                                           compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
+                    //默认将缺失的instance划到右边
                     rch_gh = rch_gh + p_missing_gh;
                     float_type default_to_right_gain = max(0.f,
                                                            compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
@@ -293,6 +303,7 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
         device_loop(n_max_nodes_in_level, [=]__device__(int i) {
             sp_data[i].nid = -1;
         });
+        //对当前深度的每个节点得到最佳划分
         device_loop(n_nodes_in_level, [=]__device__(int i) {
             int_float bst = best_idx_gain_data[i];
             float_type best_split_gain = get<1>(bst);
