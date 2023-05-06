@@ -14,15 +14,21 @@
 
 void ExactTreeBuilder::find_split(int level, int device_id) {
     const SparseColumns &columns = shards[device_id].columns;
+    //instance到node的映射
     SyncArray<int> &nid = ins2node_id[device_id];
+    //不同GPU上的梯度
     SyncArray<GHPair> &gh_pair = gradients[device_id];
+    //不同GPU上的树
     Tree &tree = trees[device_id];
     SyncArray<SplitPoint> &sp = this->sp[device_id];
     SyncArray<bool> &ignored_set = shards[device_id].ignored_set;
     TIMED_FUNC(timerObj);
+    //当前深度最大node数目
     int n_max_nodes_in_level = static_cast<int>(pow(2, level));
+    //当前节点node开始的索引
     int nid_offset = static_cast<int>(pow(2, level) - 1);
     int n_column = columns.n_column;
+    //属性数乘当前节点数目
     int n_partition = n_column * n_max_nodes_in_level;
     int nnz = columns.nnz;
     int n_block = std::min((nnz / n_column - 1) / 256 + 1, 32 * 56);
@@ -37,10 +43,15 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
         int n_split;
         SyncArray<GHPair> gh_prefix_sum(nnz);
         SyncArray<GHPair> missing_gh(n_partition);
+
+        //int_float是 thrust::tuple<int, float_type>
         SyncArray<int_float> rle_key(nnz);
         if (nnz * 4 > 1.5 * (1 << 30)) rle_key.resize(int(nnz * 0.1));
+
+        //rle代表rle压缩，rle_pid_data获得的是tuple中的int，rle_fval_data获得的是tuple中的float
         auto rle_pid_data = make_transform_iterator(rle_key.device_data(),
                                                     [=]__device__(int_float key) { return get<0>(key); });
+        //fval代表的是feature value
         auto rle_fval_data = make_transform_iterator(rle_key.device_data(),
                                                      [=]__device__(int_float key) { return get<1>(key); });
         {
@@ -54,20 +65,25 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
                     {
                         //input
                         auto *nid_data = nid.device_data();
+                        //csc_row_idx长度是nnz，iid_data是特征值属于的instance
                         const int *iid_data = columns.csc_row_idx.device_data();
 
                         LOG(TRACE) << "after using v_stats and columns";
                         //output
                         int *fvid2pid_data = fvid2pid.device_data();
+
+                        //遍历每个属性值，判断该属性值对应的instance属于哪个node
                         device_loop_2d(
                                 n_column, columns.csc_col_ptr.device_data(),
                                 [=]__device__(int col_id, int fvid) {
                             //feature value id -> instance id -> node id
+                            //nid是节点的index
                             int nid = nid_data[iid_data[fvid]];
+                            //pid表示划分后的id
                             int pid;
                             //if this node is leaf node, move it to the end
                             if (nid < nid_offset) pid = INT_MAX;//todo negative
-                            else pid = col_id * n_max_nodes_in_level + nid - nid_offset;
+                            else pid = col_id * n_max_nodes_in_level + nid - nid_offset; //相同节点的instance的同一个属性拥有相同的pid
                             fvid2pid_data[fvid] = pid;
                         },
                         n_block);
@@ -81,6 +97,8 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
                         sequence(cuda::par, fvid_new2old.device_data(), fvid_new2old.device_end(), 0);
 
                         //using prefix sum memory for temporary storage
+                        //这里对同一个节点的每个属性进行排序
+                        //fvid_new2old，表示排序后的fvid2pid数组中元素的新旧位置关系。
                         cub_sort_by_key(fvid2pid, fvid_new2old, -1, true, (void *) gh_prefix_sum.device_data());
                         LOG(DEBUG) << "sorted fvid2pid " << fvid2pid;
                         LOG(DEBUG) << "fvid_new2old " << fvid_new2old;
@@ -98,6 +116,8 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
                                     make_permutation_iterator(
                                             columns.csc_val.device_data(),
                                             fvid_new2old.device_data())));//use fvid_new2old to access csc_val
+                    
+                    //这里的key是一个tuple，tuple(0)保证属于同一个part，同一个属性，tuple(1)保证值相同
                     n_split = reduce_by_key(
                             cuda::par,
                             key_iter, key_iter + nnz,

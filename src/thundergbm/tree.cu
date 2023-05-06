@@ -9,7 +9,9 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
     TIMED_FUNC(timerObj);
     int n_max_nodes = static_cast<int>(pow(2, param.depth + 1) - 1);
     nodes = SyncArray<TreeNode>(n_max_nodes);
+    //每个node的相关数据
     auto node_data = nodes.device_data();
+    //树的初始化，为每个节点分配index，以及父节点子节点的index
     device_loop(n_max_nodes, [=]__device__(int i) {
         node_data[i].final_id = i;
         node_data[i].split_feature_id = -1;
@@ -28,8 +30,10 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
     });
 
     //init root node
+    //梯度求和
     GHPair sum_gh = thrust::reduce(thrust::cuda::par, gradients.device_data(), gradients.device_end());
     float_type lambda = param.lambda;
+    //根节点，这里的<1,1>是什么意思？
     device_loop<1, 1>(1, [=]__device__(int i) {
         Tree::TreeNode &root_node = node_data[0];
         root_node.sum_gh_pair = sum_gh;

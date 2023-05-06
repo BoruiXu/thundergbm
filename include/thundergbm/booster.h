@@ -47,7 +47,7 @@ void Booster::init(const DataSet &dataSet, const GBMParam &param) {
     //目标类型：回归还是分类任务
     obj.reset(ObjectiveFunction::create(param.objective));
     obj->configure(param, dataSet);
-    
+
     //loss函数类型：mse等
     metric.reset(Metric::create(obj->default_metric_name()));
     metric->configure(param, dataSet);
@@ -73,6 +73,7 @@ void Booster::boost(vector<vector<Tree>> &boosted_model) {
     if (param.bagging) rowSampler.do_bagging(gradients);
     PERFORMANCE_CHECKPOINT(timerObj);
     //build new model/approximate function
+    //这一步对树进行构建
     boosted_model.push_back(fbuilder->build_approximate(gradients));
 
     PERFORMANCE_CHECKPOINT(timerObj);
