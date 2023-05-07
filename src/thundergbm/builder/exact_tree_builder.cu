@@ -13,6 +13,7 @@
 #include "thrust/binary_search.h"
 
 void ExactTreeBuilder::find_split(int level, int device_id) {
+    //得到csc格式存储的数据，并且在csc转换时将每个列根据数值大小进行了排序
     const SparseColumns &columns = shards[device_id].columns;
     //instance到node的映射
     SyncArray<int> &nid = ins2node_id[device_id];
