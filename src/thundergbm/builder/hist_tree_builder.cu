@@ -45,6 +45,7 @@ void HistTreeBuilder::get_bin_ids() {
                 auto search_begin = cut_points_ptr + cut_row_ptr[cid];
                 auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
                 auto val = csc_val_data[i];
+                //存储的是每个属性的第几个bin
                 bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
             }, n_block);
         }
@@ -79,10 +80,12 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
     TIMED_FUNC(timerObj);
     int n_nodes_in_level = static_cast<int>(pow(2, level));
+    //当前level节点的开始index
     int nid_offset = static_cast<int>(pow(2, level) - 1);
     int n_column = columns.n_column;
     int n_partition = n_column * n_nodes_in_level;
     int n_bins = cut.cut_points_val.size();
+    //一个树一层最多的节点个数
     int n_max_nodes = 2 << param.depth;
     int n_max_splits = n_max_nodes * n_bins;
     int n_split = n_nodes_in_level * n_bins;
@@ -115,6 +118,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         auto dense_bin_id_data = dense_bin_id.device_data();
                         auto max_num_bin = param.max_num_bin;
                         auto n_instances = this->n_instances;
+                        //统计每个属性的直方图中每个bin的梯度
                         if (smem_size > 48 * 1024) {
                             device_loop(n_instances * n_column, [=]__device__(int i) {
                                 int iid = i / n_column;
@@ -131,7 +135,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                                 }
                             });
-                        } else {
+                        } else { //smem_size < 48 * 1024 ,利用share mem
                             int num_fv = n_instances * n_column;
                             anonymous_kernel([=]__device__() {
                                 extern __shared__ GHPair local_hist[];
@@ -168,17 +172,18 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             }, num_fv, smem_size);
                         }
                     } else {
-                        //otherwise
+                        //otherwise，不是root节点
                         auto t_dp_begin = timer.now();
                         SyncArray<int> node_idx(n_instances);
                         SyncArray<int> node_ptr(n_nodes_in_level + 1);
                         {
                             TIMED_SCOPE(timerObj, "data partitioning");
                             SyncArray<int> nid4sort(n_instances);
-                            nid4sort.copy_from(ins2node_id[device_id]);
+                            nid4sort.copy_from(ins2node_id[device_id]);//ins2node_id每个instance划分到的节点
                             sequence(cuda::par, node_idx.device_data(), node_idx.device_end(), 0);
                             cub_sort_by_key(nid4sort, node_idx);
                             auto counting_iter = make_counting_iterator < int > (nid_offset);
+                            //node_ptr[0]存储的是当前深度的第一个节点在nid4sort中刚开始的位置
                             node_ptr.host_data()[0] =
                                     lower_bound(cuda::par, nid4sort.device_data(), nid4sort.device_end(), nid_offset) -
                                     nid4sort.device_data();
@@ -201,15 +206,16 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         auto max_num_bin = param.max_num_bin;
                         for (int i = 0; i < n_nodes_in_level / 2; ++i) {
 
-                            int nid0_to_compute = i * 2;
-                            int nid0_to_substract = i * 2 + 1;
-                            int n_ins_left = node_ptr_data[nid0_to_compute + 1] - node_ptr_data[nid0_to_compute];
-                            int n_ins_right = node_ptr_data[nid0_to_substract + 1] - node_ptr_data[nid0_to_substract];
-                            if (max(n_ins_left, n_ins_right) == 0) continue;
+                            int nid0_to_compute = i * 2; //偶数
+                            int nid0_to_substract = i * 2 + 1; //奇数
+                            int n_ins_left = node_ptr_data[nid0_to_compute + 1] - node_ptr_data[nid0_to_compute];//左节点的ins数量
+                            int n_ins_right = node_ptr_data[nid0_to_substract + 1] - node_ptr_data[nid0_to_substract];//右节点的ins数量
+                            if (max(n_ins_left, n_ins_right) == 0) continue;//左右节点都没有
                             if (n_ins_left > n_ins_right)
                                 swap(nid0_to_compute, nid0_to_substract);
 
                             //compute
+                            //计算一个节点的直方图
                             {
                                 int nid0 = nid0_to_compute;
                                 auto idx_begin = node_ptr.host_data()[nid0];
@@ -219,7 +225,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                                 if (smem_size > 48 * 1024) {
                                     device_loop((idx_end - idx_begin) * n_column, [=]__device__(int i) {
-                                        int iid = node_idx_data[i / n_column + idx_begin];
+                                        int iid = node_idx_data[i / n_column + idx_begin]; //循环中先处理一个instance的不同列
                                         int fid = i % n_column;
                                         unsigned char bid = dense_bin_id_data[iid * n_column + fid];
                                         if (bid != max_num_bin) {
@@ -482,7 +488,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     TreeBuilder::init(dataset, param);
     //TODO refactor
     //init shards
-    int n_device = param.n_device;
+    int n_device = param.n_device; 
     shards = vector<Shard>(n_device);
     vector<std::unique_ptr<SparseColumns>> v_columns(param.n_device);
     for (int i = 0; i < param.n_device; ++i) {
@@ -496,12 +502,13 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
         columns.csr2csc_gpu(dataset, v_columns);
     cut = vector<HistCut>(param.n_device);
     dense_bin_id = MSyncArray<unsigned char>(param.n_device);
+    //保存历史直方图
     last_hist = MSyncArray<GHPair>(param.n_device);
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         if(dataset.use_cpu)
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
         else
-            cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
+            cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances); //划分到不同的桶
         last_hist[device_id].resize((2 << param.depth) * cut[device_id].cut_points_val.size());
     });
     get_bin_ids();

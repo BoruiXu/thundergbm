@@ -99,6 +99,7 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
     CHECK_LT(max_elem + n_columns*(max_elem + 1),INT_MAX) << "Max_values is too large to be transformed";
 
     // 1. transform data into unique ranges
+    //_1是target_arr，_2是flags
     thrust::transform(thrust::device,
                       target_arr.device_data(),
                       target_arr.device_end(),
@@ -106,9 +107,11 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
                       target_arr.device_data(),
                       (_1 + _2 * (max_elem + 1)));
     // 2. sort the transformed data
+    //将相同属性的排列到一块,但是本身相同属性的不就在一块么，本身不是排列好的么？降序代表相同的元素保留最后一个？
     sort_array(target_arr, false);
     thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
     // 3. eliminate duplicates
+    //每个属性中去除重复的数值
     auto new_end = thrust::unique_by_key(thrust::device, target_arr.device_data(), target_arr.device_end(),
                                          flags.device_data());
     int new_size = new_end.first - target_arr.device_data();
@@ -135,7 +138,8 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     cut_fid.resize(columns.csc_val.size());
     cut_points_val.copy_from(columns.csc_val);
 
-    auto cut_fid_data = cut_fid.device_data();
+    auto cut_ifd_data = cut_fid.device_data();
+    //每个数值对应特征id
     device_loop_2d(n_column, columns.csc_col_ptr.device_data(), [=] __device__(int fid, int i) {
         cut_fid_data[i] = fid;
     });
@@ -143,24 +147,31 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
 
     cut_row_ptr.resize(n_column + 1);
     auto cut_row_ptr_data = cut_row_ptr.device_data();
+    //统计新的csc的每列的个数数组
     device_loop(cut_fid.size(), [=] __device__(int fid) {
         atomicAdd(cut_row_ptr_data + cut_fid_data[fid] + 1, 1);
     });
+    //前缀和，转换成每种特征在数组中的起始位置
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
 
     SyncArray<int> select_index(cut_fid.size());
     auto select_index_data = select_index.device_data();
+
+    //select_index是寻找bin的划分点，这里的interval是一个桶几个元素
+    //当一个属性值的数量小于桶的最大数量的时候，每个属性值都作为一个bin
     device_loop_2d_with_maximum(n_column, cut_row_ptr_data, max_num_bins, [=] __device__(int fid, int i, int interval) {
-        int feature_idx = i - cut_row_ptr_data[fid];
+        int feature_idx = i - cut_row_ptr_data[fid]; //i是每一个属性中不重复的元素值，feature_idx代表当前属性第几个元素
         if(interval == 0)
             select_index_data[i] = 1;
         else if(feature_idx < max_num_bins)
             select_index_data[cut_row_ptr_data[fid] + interval * feature_idx] = 1;
     });
 
+    //从select_index中挑选出切分的feature_id和对应的特征值
     cub_select(cut_fid, select_index);
     cub_select(cut_points_val, select_index);
 
+    //再次计算前缀和？
     cut_fid_data = cut_fid.device_data();
     cut_row_ptr.resize(n_column + 1);
     cut_row_ptr_data = cut_row_ptr.device_data();

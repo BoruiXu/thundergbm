@@ -169,7 +169,7 @@ void ExactTreeBuilder::find_split(int level, int device_id) {
                     fval_data[i] = rle_fval_data[i];
                 });
 
-                //不明白为什么这样计算
+                //为了泛化性，即分裂点的时候使用两个点的平均值之类的
                 device_loop(n_split, [=]__device__(int i) {
                     int pid = rle_pid_data[i];
                     if (pid == INT_MAX) return;
