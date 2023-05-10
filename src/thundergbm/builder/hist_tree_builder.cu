@@ -314,7 +314,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                 inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + n_split,
                                       hist.device_data(), hist.device_data());
                 LOG(DEBUG) << hist;
-
+                //计算missing values
                 auto nodes_data = tree.nodes.device_data();
                 auto missing_gh_data = missing_gh.device_data();
                 auto cut_row_ptr = cut.cut_row_ptr.device_data();
