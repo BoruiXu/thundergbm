@@ -138,7 +138,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     cut_fid.resize(columns.csc_val.size());
     cut_points_val.copy_from(columns.csc_val);
 
-    auto cut_ifd_data = cut_fid.device_data();
+    auto cut_fid_data = cut_fid.device_data();
     //每个数值对应特征id
     device_loop_2d(n_column, columns.csc_col_ptr.device_data(), [=] __device__(int fid, int i) {
         cut_fid_data[i] = fid;

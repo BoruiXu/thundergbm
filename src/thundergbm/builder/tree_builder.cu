@@ -147,7 +147,7 @@ void TreeBuilder::split_point_all_reduce(int depth) {
 vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients) {
     vector<Tree> trees(param.tree_per_rounds);
     TIMED_FUNC(timerObj);
-    //对列进行采样划分，不同GPU上是否会有重复的列？
+    //对列进行采样划分，每个GPU上已经有不同的列
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         this->shards[device_id].column_sampling(param.column_sampling_rate);
     });
