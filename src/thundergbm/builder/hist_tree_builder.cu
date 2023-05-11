@@ -102,6 +102,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
         SyncArray<GHPair> missing_gh(n_partition);
         auto cut_fid_data = cut.cut_fid.device_data();
         auto i2fid = [=] __device__(int i) { return cut_fid_data[i % n_bins]; };
+        //直方图中不同节点都存储所有的feature，hist_fid能得到cut_fid_data不同位置的每个feature id
         auto hist_fid = make_transform_iterator(counting_iterator<int>(0), i2fid);
         {
             {
@@ -311,6 +312,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                 LOG(DEBUG) << "-------------->>> cp_time::::: " << this->total_copy_time;
 
                 //LOG(DEBUG) << "cutfid = " << cut.cut_fid;
+                //前缀和
                 inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + n_split,
                                       hist.device_data(), hist.device_data());
                 LOG(DEBUG) << hist;
