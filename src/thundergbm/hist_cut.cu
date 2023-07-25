@@ -97,7 +97,7 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
     float max_elem = max_elements(target_arr);
     LOG(DEBUG) << "max feature value: " << max_elem;
     CHECK_LT(max_elem + n_columns*(max_elem + 1),INT_MAX) << "Max_values is too large to be transformed";
-
+    
     // 1. transform data into unique ranges
     thrust::transform(thrust::device,
                       target_arr.device_data(),
@@ -135,10 +135,13 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     cut_fid.resize(columns.csc_val_origin.size());
     cut_points_val.copy_from(columns.csc_val_origin);
 
+
     auto cut_fid_data = cut_fid.device_data();
     device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=] __device__(int fid, int i) {
         cut_fid_data[i] = fid;
     });
+
+
     unique_by_flag(cut_points_val, cut_fid, n_column);
     
     cut_row_ptr.resize(n_column + 1);
@@ -168,10 +171,10 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
         atomicAdd(cut_row_ptr_data + cut_fid_data[fid] + 1, 1);
     });
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
-
+    
     LOG(DEBUG) << "--->>>>  cut points value: " << cut_points_val;
     LOG(DEBUG) << "--->>>> cut row ptr: " << cut_row_ptr;
     LOG(DEBUG) << "--->>>> cut fid: " << cut_fid;
-    LOG(DEBUG) << "TOTAL CP:" << cut_fid.size();
-    LOG(DEBUG) << "NNZ: " << columns.csc_val_origin.size();
+    LOG(INFO) << "TOTAL CP:" << cut_fid.size();
+    LOG(INFO) << "NNZ: " << columns.csc_val_origin.size();
 }

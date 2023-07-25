@@ -84,6 +84,24 @@ void SparseColumns::csr2csc_gpu(
     cudaDeviceSynchronize();
     cusparseDestroy(handle);
     cusparseDestroyMatDescr(descr);
+    ////转换存在问题，kdda的时候第一个特征的范围转换之后不对了
+    //LOG(INFO)<<"test convert correctness";
+    //LOG(INFO)<<"1st feature range "<<csc_col_ptr.host_data()[0]<<" "<<csc_col_ptr.host_data()[1];
+
+    //check none-zero feature
+    int tmp = 0;
+    for(int i=0;i<n_column+1;++i){
+        if(csc_col_ptr.host_data()[i+1]-csc_col_ptr.host_data()[i]>0){
+            tmp++;
+        }
+    }
+
+    ////check convert before
+    //LOG(INFO)<<"last col idex "<<col_idx.host_data()[nnz-1];
+    //
+
+    //
+    LOG(INFO)<<"none-zero feature num is "<<tmp;
 
     val.resize(0);
     row_ptr.resize(0);
@@ -133,9 +151,10 @@ void SparseColumns::csr2csc_gpu(
         columns.csc_col_ptr_origin.copy_from(csc_col_ptr.host_data() + first_col_id,
                                       n_column_sub + 1);
         
+
         int *csc_col_ptr_2d_data = columns.csc_col_ptr_origin.device_data();
         correct_start(csc_col_ptr_2d_data, first_col_start, n_column_sub);
-        
+         
         //columns.csc_col_ptr_origin.copy_from(columns.csc_col_ptr.host_data(),n_column_sub + 1);
         // correct segment start positions
         //LOG(TRACE) << "sorting feature values (multi-device)";
@@ -199,6 +218,15 @@ void SparseColumns::csr2csc_cpu(
         csc_col_ptr[i] = last;
         last = next_last;
     }
+    
+    //check correctness
+    //int t = 0;
+    //for(int i=0;i<n_column + 1;++i){
+    //    if(csc_col_ptr[i+1]-csc_col_ptr[i]>0){
+    //        t++;
+    //    }
+    //}
+    //LOG(INFO)<<"none zero feature num is "<<t;
 
     // split data to multiple device
     int n_device = v_columns.size();
@@ -218,19 +246,30 @@ void SparseColumns::csr2csc_cpu(
         columns.nnz = nnz_sub;
         columns.n_column = n_column_sub;
         columns.n_row = n_row;
-        columns.csc_val.resize(nnz_sub);
-        columns.csc_row_idx.resize(nnz_sub);
-        columns.csc_col_ptr.resize(n_column_sub + 1);
+        //columns.csc_val.resize(nnz_sub);
+        //columns.csc_row_idx.resize(nnz_sub);
+        //columns.csc_col_ptr.resize(n_column_sub + 1);
 
-        columns.csc_val.copy_from(csc_val_ptr + first_col_start, nnz_sub);
-        columns.csc_row_idx.copy_from(csc_row_ptr + first_col_start, nnz_sub);
-        columns.csc_col_ptr.copy_from(csc_col_ptr + first_col_id,
+        //columns.csc_val.copy_from(csc_val_ptr + first_col_start, nnz_sub);
+        //columns.csc_row_idx.copy_from(csc_row_ptr + first_col_start, nnz_sub);
+        //columns.csc_col_ptr.copy_from(csc_col_ptr + first_col_id,
+        //                              n_column_sub + 1);
+
+        //int *csc_col_ptr_2d_data = columns.csc_col_ptr.host_data();
+        //correct_start(csc_col_ptr_2d_data, first_col_start, n_column_sub);
+        //seg_sort_by_key_cpu(columns.csc_val, columns.csc_row_idx,
+        //                    columns.csc_col_ptr);
+        columns.csc_val_origin.resize(nnz_sub);
+        columns.csc_row_idx_origin.resize(nnz_sub);
+        columns.csc_col_ptr_origin.resize(n_column_sub + 1);
+        
+        columns.csc_val_origin.copy_from(csc_val_ptr+first_col_start,nnz_sub);
+        columns.csc_row_idx_origin.copy_from(csc_row_ptr + first_col_start,nnz_sub);
+        columns.csc_col_ptr_origin.copy_from(csc_col_ptr + first_col_id,
                                       n_column_sub + 1);
-
-        int *csc_col_ptr_2d_data = columns.csc_col_ptr.host_data();
+        
+        int *csc_col_ptr_2d_data = columns.csc_col_ptr_origin.device_data();
         correct_start(csc_col_ptr_2d_data, first_col_start, n_column_sub);
-        seg_sort_by_key_cpu(columns.csc_val, columns.csc_row_idx,
-                            columns.csc_col_ptr);
     });
 
     delete[](csc_val_ptr);
