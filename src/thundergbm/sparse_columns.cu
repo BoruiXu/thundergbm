@@ -196,6 +196,9 @@ void SparseColumns::csr2csc_cpu(
         csc_col_ptr[idx] += 1;
     }
 
+    //读数据有问题？？？？
+    LOG(INFO)<<"16777217 should be 1? "<<csc_col_ptr[16777217];
+
     for (int i = 1; i < n_column + 1; ++i) {
         csc_col_ptr[i] += csc_col_ptr[i - 1];
     }
@@ -220,6 +223,7 @@ void SparseColumns::csr2csc_cpu(
     }
     
     //check correctness
+    LOG(INFO)<<"20216829 feature have value? "<<csc_col_ptr[20216828]<<" "<<csc_col_ptr[20216829];
     //int t = 0;
     //for(int i=0;i<n_column + 1;++i){
     //    if(csc_col_ptr[i+1]-csc_col_ptr[i]>0){
@@ -227,6 +231,14 @@ void SparseColumns::csr2csc_cpu(
     //    }
     //}
     //LOG(INFO)<<"none zero feature num is "<<t;
+    //save csc_col_ptr
+
+    std::ofstream outfile("/home/xbr/ML_dataset/csc_col_kdda.txt");
+
+    for(int i=0;i<n_column+1;i++){
+        outfile << csc_col_ptr[i] << " ";
+    }
+    outfile.close();
 
     // split data to multiple device
     int n_device = v_columns.size();

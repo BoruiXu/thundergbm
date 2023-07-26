@@ -58,8 +58,8 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
     auto stop = timer.now();
     std::chrono::duration<float> training_time = stop - start;
     LOG(INFO)<<"convert time = "<<convert_time;
-    LOG(INFO) << "training time = " << training_time.count();
-    LOG(INFO)<<"total time = "<<convert_time+training_time.count();
+    LOG(INFO) << "all training time = " << training_time.count();
+    //LOG(INFO)<<"total time = "<<convert_time+training_time.count();
 
     std::atexit([]() {
         SyncMem::clear_cache();
