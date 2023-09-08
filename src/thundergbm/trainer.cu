@@ -19,7 +19,6 @@ long long total_sort_time_hist = 0;
 long long total_exact_prefix_sum_time = 0;
 
 
-float convert_time = 0;
 vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset) {
     if (param.tree_method == "auto")
         if (dataset.n_features() > 20000)
@@ -46,8 +45,8 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
     std::chrono::high_resolution_clock timer;
     auto start = timer.now();
     booster.init(dataset, param);
-    //std::chrono::high_resolution_clock timer;
-    //auto start = timer.now();
+    auto stop_init = timer.now();
+    std::chrono::duration<float> init_time = stop_init - start;
     for (int i = 0; i < param.n_trees; ++i) {
         //one iteration may produce multiple trees, depending on objectives
         booster.boost(boosted_model);
@@ -55,9 +54,9 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
     LOG(INFO)<<"total  hist construction time is "<<total_sort_time_hist/1e6;
     LOG(INFO)<<"total  exact prefix sum time is "<<total_exact_prefix_sum_time/1e6;
     LOG(INFO)<<"total update instance to node index array time is "<<total_sp_time/1e6;
+    LOG(INFO)<<"initialization time = "<<init_time.count();
     auto stop = timer.now();
     std::chrono::duration<float> training_time = stop - start;
-    LOG(INFO)<<"convert time = "<<convert_time;
     LOG(INFO) << "all training time = " << training_time.count();
     //LOG(INFO)<<"total time = "<<convert_time+training_time.count();
 

@@ -10,7 +10,6 @@
 #include "thundergbm/util/device_lambda.cuh"
 #include "thundergbm/util/multi_device.h"
 
-extern float convert_time;
 // FIXME remove this function
 void correct_start(int *csc_col_ptr_2d_data, int first_col_start,
                    int n_column_sub) {
@@ -106,7 +105,7 @@ void SparseColumns::csr2csc_gpu(
     val.resize(0);
     row_ptr.resize(0);
     col_idx.resize(0);
-    // SyncMem::clear_cache();
+    SyncMem::clear_cache();
     int gpu_num;
     cudaError_t err = cudaGetDeviceCount(&gpu_num);
     std::atexit([]() { SyncMem::clear_cache(); });
@@ -164,7 +163,6 @@ void SparseColumns::csr2csc_gpu(
 
     auto t_end = timer.now();
     std::chrono::duration<float> used_time = t_end - t_start;
-    convert_time = used_time.count();
     LOG(INFO) << "Converting csr to csc using time: " << used_time.count()
               << " s";
 }
