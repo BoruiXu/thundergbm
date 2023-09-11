@@ -210,8 +210,11 @@ void device_loop_part_dense_bin_id_csc(int col_size, const int *csc_col_ptr, con
                                         L lambda, 
                                         unsigned int NUM_BLOCK = 1,
                                         unsigned int BLOCK_SIZE = 256) {
-    //fix NUM_BLOCK
+    //TODO fix NUM_BLOCK
     if (col_size > 0) {
+        if(NUM_BLOCK>65535){
+            NUM_BLOCK = 65535;
+        }
         lambda_part_dense_bin_id_csc_kernel << < dim3(col_size, NUM_BLOCK), BLOCK_SIZE >> > (col_map,csc_col_ptr,lambda);
         cudaDeviceSynchronize();
         CUDA_CHECK(cudaPeekAtLastError());
