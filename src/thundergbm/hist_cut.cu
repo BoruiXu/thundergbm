@@ -94,76 +94,86 @@ void syncarray_resize(SyncArray<T> &buf_array, int new_size) {
 void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_columns) {
     using namespace thrust::placeholders;
     //double type array
-    SyncArray<double> target_arr_double;
-    target_arr_double.resize(target_arr.size());
-    auto target_arr_double_device = target_arr_double.device_data();
-    auto target_arr_device = target_arr.device_data();
+    //SyncArray<double> target_arr_double;
+    //target_arr_double.resize(target_arr.size());
+    //auto target_arr_double_device = target_arr_double.device_data();
+    //auto target_arr_device = target_arr.device_data();
 
-    device_loop(target_arr.size(),[=]__device__(size_t i){
-        target_arr_double_device[i] = (double)target_arr_device[i];
-    });
-
+    //device_loop(target_arr.size(),[=]__device__(size_t i){
+    //    target_arr_double_device[i] = (double)target_arr_device[i];
+    //});
 
     double max_elem = max_elements(target_arr);
     LOG(DEBUG) << "max feature value: " << max_elem;
     CHECK_LT(max_elem + n_columns*(max_elem + 1),INT_MAX) << "Max_values is too large to be transformed";
-    
-    //new double method
-    //// 1. transform data into unique ranges
-    //thrust::transform(thrust::device,
-    //                  target_arr.device_data(),
-    //                  target_arr.device_end(),
-    //                  flags.device_data(),
-    //                  target_arr.device_data(),
-    //                  (_1 + _2 * (max_elem + 1)));
-    //// 2. sort the transformed data
-    //sort_array(target_arr, false);
-    //thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
-    //// 3. eliminate duplicates
-    //auto new_end = thrust::unique_by_key(thrust::device, target_arr.device_data(), target_arr.device_end(),
-    //                                     flags.device_data());
-    //int new_size = new_end.first - target_arr.device_data();
-    //syncarray_resize(target_arr, new_size);
-    //syncarray_resize(flags, new_size);
-    //// 4. transform data back
-    //thrust::transform(thrust::device, target_arr.device_data(),
-    //                  target_arr.device_end(),
-    //                  flags.device_data(),
-    //                  target_arr.device_data(),
-    //                  (_1 - _2 * (max_elem + 1)));
-    //cub_sort_by_key(flags, target_arr);
-    
-    //new double method
-    // 1. transform data into unique ranges
-    thrust::transform(thrust::device,
-                      target_arr_double.device_data(),
-                      target_arr_double.device_end(),
-                      flags.device_data(),
-                      target_arr_double.device_data(),
-                      (_1 + _2 * (max_elem + 1)));
-    // 2. sort the transformed data
-    sort_array(target_arr_double, false);
-    thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
-    // 3. eliminate duplicates
-    auto new_end = thrust::unique_by_key(thrust::device, target_arr_double.device_data(), target_arr_double.device_end(),
-                                         flags.device_data());
-    int new_size = new_end.first - target_arr_double.device_data();
-    syncarray_resize(target_arr, new_size);
-    syncarray_resize(target_arr_double, new_size);
-    syncarray_resize(flags, new_size);
-    // 4. transform data back
-    thrust::transform(thrust::device, target_arr_double.device_data(),
-                      target_arr_double.device_end(),
-                      flags.device_data(),
-                      target_arr_double.device_data(),
-                      (_1 - _2 * (max_elem + 1)));
-    cub_sort_by_key(flags, target_arr_double);
+        
+    if(target_arr.size()<300000000){
+        // 1. transform data into unique ranges
+        thrust::transform(thrust::device,
+                          target_arr.device_data(),
+                          target_arr.device_end(),
+                          flags.device_data(),
+                          target_arr.device_data(),
+                          (_1 + _2 * (max_elem + 1)));
+        // 2. sort the transformed data
+        sort_array(target_arr, false);
+        thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
+        // 3. eliminate duplicates
+        auto new_end = thrust::unique_by_key(thrust::device, target_arr.device_data(), target_arr.device_end(),
+                                             flags.device_data());
+        int new_size = new_end.first - target_arr.device_data();
+        syncarray_resize(target_arr, new_size);
+        syncarray_resize(flags, new_size);
+        // 4. transform data back
+        thrust::transform(thrust::device, target_arr.device_data(),
+                          target_arr.device_end(),
+                          flags.device_data(),
+                          target_arr.device_data(),
+                          (_1 - _2 * (max_elem + 1)));
+        cub_sort_by_key(flags, target_arr);
+    }
+    else{
+        //double type array
+        SyncArray<double> target_arr_double;
+        target_arr_double.resize(target_arr.size());
+        auto target_arr_double_device = target_arr_double.device_data();
+        auto target_arr_device = target_arr.device_data();
 
-    device_loop(target_arr.size(),[=]__device__(size_t i){
+        device_loop(target_arr.size(),[=]__device__(size_t i){
+            target_arr_double_device[i] = (double)target_arr_device[i];
+        });
+        //new double method
+        // 1. transform data into unique ranges
+        thrust::transform(thrust::device,
+                          target_arr_double.device_data(),
+                          target_arr_double.device_end(),
+                          flags.device_data(),
+                          target_arr_double.device_data(),
+                          (_1 + _2 * (max_elem + 1)));
+        // 2. sort the transformed data
+        sort_array(target_arr_double, false);
+        thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
+        // 3. eliminate duplicates
+        auto new_end = thrust::unique_by_key(thrust::device, target_arr_double.device_data(), target_arr_double.device_end(),
+                                             flags.device_data());
+        int new_size = new_end.first - target_arr_double.device_data();
+        syncarray_resize(target_arr, new_size);
+        syncarray_resize(target_arr_double, new_size);
+        syncarray_resize(flags, new_size);
+        // 4. transform data back
+        thrust::transform(thrust::device, target_arr_double.device_data(),
+                          target_arr_double.device_end(),
+                          flags.device_data(),
+                          target_arr_double.device_data(),
+                          (_1 - _2 * (max_elem + 1)));
+        cub_sort_by_key(flags, target_arr_double);
 
-        target_arr_device[i] = (float)target_arr_double_device[i];
+        device_loop(target_arr.size(),[=]__device__(size_t i){
 
-    });
+            target_arr_device[i] = (float)target_arr_double_device[i];
+
+        });
+    }
 }
 
 /**
