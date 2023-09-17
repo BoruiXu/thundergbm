@@ -312,7 +312,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                 LOG(DEBUG) << "-------------->>> cp_time::::: " << this->total_copy_time;
 
                 //LOG(DEBUG) << "cutfid = " << cut.cut_fid;
-                //前缀和
+                //前缀和,每个直方图的前缀和形成了累积直方图（类似累积概率密度函数）
                 inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + n_split,
                                       hist.device_data(), hist.device_data());
                 LOG(DEBUG) << hist;
@@ -322,10 +322,11 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                 auto cut_row_ptr = cut.cut_row_ptr.device_data();
                 auto hist_data = hist.device_data();
                 device_loop(n_partition, [=]__device__(int pid) {
-                    int nid0 = pid / n_column;
+                    int nid0 = pid / n_column;//node id
                     int nid = nid0 + nid_offset;
                     if (!nodes_data[nid].splittable()) return;
                     int fid = pid % n_column;
+                    //判断表示当前feature不是空的
                     if (cut_row_ptr[fid + 1] != cut_row_ptr[fid]) {
                         GHPair node_gh = hist_data[nid0 * n_bins + cut_row_ptr[fid + 1] - 1];
                         missing_gh_data[pid] = nodes_data[nid].sum_gh_pair - node_gh;
