@@ -203,7 +203,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
     int n_column = columns.n_column;
     size_t n_partition = n_column * n_nodes_in_level;
     int n_bins = cut.cut_points_val.size();
-    int n_max_nodes = 2 << param.depth;
+    int n_max_nodes = 1 << param.depth;
     size_t n_max_splits = n_max_nodes * (long long)n_bins;
     size_t n_split = n_nodes_in_level * (long long)n_bins;
 
@@ -587,7 +587,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
         else
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
-        last_hist[device_id].resize((2 << param.depth) * cut[device_id].cut_points_val.size());
+        last_hist[device_id].resize((1 << param.depth) * cut[device_id].cut_points_val.size());
     });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
@@ -782,7 +782,6 @@ void HistTreeBuilder::update_ins2node_id(int level) {
         auto bin_id_origin_data = bin_id_origin.device_data();
         auto csc_row_idx_data = columns.csc_row_idx_origin.device_data();
         //update process
-
         device_loop_part_dense_bin_id_csc(using_col_num,columns.csc_col_ptr_origin.device_data(),col_idx2feature_map_device,[=]__device__(int col_idx,int i){
 
             int ins_idx = csc_row_idx_data[i];
