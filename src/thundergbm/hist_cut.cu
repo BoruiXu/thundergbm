@@ -15,6 +15,14 @@
 #include "thundergbm/util/device_lambda.cuh"
 #include "thrust/unique.h"
 
+#include <chrono>
+#include<iostream>
+typedef std::chrono::high_resolution_clock Clock;
+#define TDEF(x_) std::chrono::high_resolution_clock::time_point x_##_t0, x_##_t1;
+#define TSTART(x_) x_##_t0 = Clock::now();
+#define TEND(x_) x_##_t1 = Clock::now();
+#define TPRINT(x_, str) printf("%-20s \t%.6f\t sec\n", str, std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()/1e6);
+#define TINT(x_) std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()
 /**
  * not fast but need less memory
  */
@@ -182,21 +190,20 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
 void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_instances) {
     LOG(INFO) << "Fast getting cut points...";
     int n_column = columns.n_column;
-
     cut_points_val.resize(columns.csc_val_origin.size());
     cut_row_ptr.resize(columns.csc_col_ptr_origin.size());
     cut_fid.resize(columns.csc_val_origin.size());
     cut_points_val.copy_from(columns.csc_val_origin);
-
+    
+    size_t block_num = columns.csc_val_origin.size()/n_column;
 
     auto cut_fid_data = cut_fid.device_data();
     device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=] __device__(int fid, int i) {
         cut_fid_data[i] = fid;
-    });
-
-
-    unique_by_flag(cut_points_val, cut_fid, n_column);
+    },block_num);
     
+    unique_by_flag(cut_points_val, cut_fid, n_column);
+
     cut_row_ptr.resize(n_column + 1);
     auto cut_row_ptr_data = cut_row_ptr.device_data();
     device_loop(cut_fid.size(), [=] __device__(int fid) {
@@ -204,6 +211,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     });
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
 
+    size_t block_num2 = 1+ cut_points_val.size()/n_column;
     SyncArray<int> select_index(cut_fid.size());
     auto select_index_data = select_index.device_data();
     device_loop_2d_with_maximum(n_column, cut_row_ptr_data, max_num_bins, [=] __device__(int fid, int i, int interval) {
@@ -212,11 +220,12 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
             select_index_data[i] = 1;
         else if(feature_idx < max_num_bins)
             select_index_data[cut_row_ptr_data[fid] + interval * feature_idx] = 1;
-    });
+    },block_num2);
 
     cub_select(cut_fid, select_index);
     cub_select(cut_points_val, select_index);
-
+    
+    
     cut_fid_data = cut_fid.device_data();
     cut_row_ptr.resize(n_column + 1);
     cut_row_ptr_data = cut_row_ptr.device_data();
