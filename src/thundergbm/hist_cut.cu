@@ -194,8 +194,8 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     cut_row_ptr.resize(columns.csc_col_ptr_origin.size());
     cut_fid.resize(columns.csc_val_origin.size());
     cut_points_val.copy_from(columns.csc_val_origin);
-    
-    size_t block_num = columns.csc_val_origin.size()/n_column;
+   
+    size_t block_num = (columns.csc_val_origin.size()/n_column - 1)/256+1;
 
     auto cut_fid_data = cut_fid.device_data();
     device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=] __device__(int fid, int i) {
@@ -211,7 +211,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     });
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
 
-    size_t block_num2 = 1+ cut_points_val.size()/n_column;
+    size_t block_num2 = 1+ (cut_points_val.size()/n_column)/256;
     SyncArray<int> select_index(cut_fid.size());
     auto select_index_data = select_index.device_data();
     device_loop_2d_with_maximum(n_column, cut_row_ptr_data, max_num_bins, [=] __device__(int fid, int i, int interval) {
