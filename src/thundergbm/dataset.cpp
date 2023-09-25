@@ -82,14 +82,25 @@ void DataSet::load_group_file(string file_name) {
 
 void DataSet::group_label() {
     std::map<float_type, int> label_map;
+    std::vector<int> tmp_y(y.begin(),y.end());
     label.clear();
+    //sort tmp_y and get set
+    std::sort(tmp_y.begin(), tmp_y.end());
+    auto last = std::unique(tmp_y.begin(), tmp_y.end());
+    tmp_y.erase(last, tmp_y.end());
+    for(int i = 0;i<tmp_y.size();++i){
+        label_map[tmp_y[i]] = label.size();
+        label.push_back(tmp_y[i]);
+    }
+
     for (int i = 0; i < y.size(); ++i) {
-        if(label_map.find(y[i]) == label_map.end()) {
-            label_map[y[i]] = label.size();
-            label.push_back(y[i]);
-        }
+        //if(label_map.find(y[i]) == label_map.end()) {
+        //    label_map[y[i]] = label.size();
+        //    label.push_back(y[i]);
+        //}
         y[i] = label_map[y[i]];
     }
+    //LOG(INFO)<<"map "<<label_map;
 }
 
 /**

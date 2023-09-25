@@ -950,7 +950,11 @@ void HistTreeBuilder::update_ins2node_id(int level) {
                 using_col_num++;
             }
         }
-
+        
+        if(using_col_num==0){
+           has_split[device_id] = false;
+           return;
+        }
 
         SyncArray<int> col_idx2feature_map(using_col_num);
         SyncArray<int> feature2col_idx_map(n_column);
