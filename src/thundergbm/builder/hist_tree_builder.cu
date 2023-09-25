@@ -691,49 +691,11 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                         }  // end for each node
 
-
-                        // for(int m = 0;m<n_nodes_in_level/2;m++){
-                        //     int tmp_index = m;
-                        //     {
-                        //         const int_float *best_idx_gain_data = best_idx_gain.device_data();
-                        //         auto hist_data = hist.device_data();
-                        //         const auto missing_gh_data = missing_gh.device_data();
-                        //         auto cut_val_data = cut.cut_points_val.device_data();
-
-                                
-                        //         auto sp_data = sp.device_data();
-                        //         auto nodes_data = tree.nodes.device_data();
-
-                        //         int column_offset = columns.column_offset;
-
-                        //         auto cut_row_ptr_data = cut.cut_row_ptr.device_data();
-                                
-                        //         device_loop(2, [=]__device__(int i) {
-                        //             int_float bst = best_idx_gain_data[i+2*tmp_index];
-                        //             float_type best_split_gain = get<1>(bst);
-                        //             int split_index = get<0>(bst);
-                        //             if (!nodes_data[i + nid_offset+2*tmp_index].is_valid) {
-                        //                 sp_data[i+2*tmp_index].split_fea_id = -1;
-                        //                 sp_data[i+2*tmp_index].nid = -1;
-                        //                 return;
-                        //             }
-                        //             int fid = hist_fid[split_index];
-                        //             sp_data[i+2*tmp_index].split_fea_id = fid + column_offset;
-                        //             sp_data[i+2*tmp_index].nid = i + nid_offset+2*tmp_index;
-                        //             sp_data[i+2*tmp_index].gain = fabsf(best_split_gain);
-                        //             sp_data[i+2*tmp_index].fval = cut_val_data[split_index % n_bins];
-                        //             sp_data[i+2*tmp_index].split_bid = (unsigned char) (split_index % n_bins - cut_row_ptr_data[fid]);
-                        //             sp_data[i+2*tmp_index].fea_missing_gh = missing_gh_data[(i+2*tmp_index) * n_column + hist_fid[split_index]];
-                        //             sp_data[i+2*tmp_index].default_right = best_split_gain < 0;
-                        //             sp_data[i+2*tmp_index].rch_sum_gh = hist_data[split_index];
-                        //         });
-                                
-                        //     }
-                        // }
-
-                            
-
-                        //
+                        //clear array
+                        //hist.resize(0);
+                        //missing_gh.resize(0);
+                        //gain.resize(0);
+                        //best_idx_gain.resize(0);
                         
                             
                     }//end # node > 1
@@ -828,7 +790,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
         else
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
-        last_hist[device_id].resize((1 << (param.depth-1)) * cut[device_id].cut_points_val.size());
+        last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
     });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
