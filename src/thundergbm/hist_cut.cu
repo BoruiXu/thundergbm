@@ -115,7 +115,7 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
     LOG(DEBUG) << "max feature value: " << max_elem;
     CHECK_LT(max_elem + n_columns*(max_elem + 1),INT_MAX) << "Max_values is too large to be transformed";
         
-    if(target_arr.size()<300000000){
+    if(n_columns<20000000){
         // 1. transform data into unique ranges
         thrust::transform(thrust::device,
                           target_arr.device_data(),
