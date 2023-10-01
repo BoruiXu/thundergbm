@@ -988,6 +988,8 @@ void HistTreeBuilder::update_ins2node_id(int level) {
         auto &bin_id_origin = this->bin_id_origin[device_id];
         auto bin_id_origin_data = bin_id_origin.device_data();
         auto csc_row_idx_data = columns.csc_row_idx_origin.device_data();
+        size_t num_block = (n_instances/n_column)/256+1;
+        //size_t num_block = (n_instances)/256;
         //update process
         device_loop_part_dense_bin_id_csc(using_col_num,columns.csc_col_ptr_origin.device_data(),col_idx2feature_map_device,[=]__device__(int col_idx,int i){
 
@@ -997,7 +999,7 @@ void HistTreeBuilder::update_ins2node_id(int level) {
 
             dense_bin_id_data[pos] = bid;
 
-        },n_instances/256);
+        },num_block);
 
         device_loop_part_update_node(n_instances, 0, [=]__device__(size_t idx, size_t tt ) {
  
@@ -1030,7 +1032,7 @@ void HistTreeBuilder::update_ins2node_id(int level) {
 
             dense_bin_id_data[pos] = max_num_bin;
 
-        },n_instances/256);
+        },num_block);
 
         LOG(DEBUG) << "new tree_id = " << ins2node_id[device_id];
         has_split[device_id] = has_splittable.host_data()[0];
