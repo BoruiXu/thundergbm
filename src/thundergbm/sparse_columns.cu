@@ -105,7 +105,8 @@ void SparseColumns::csr2csc_gpu(
     val.resize(0);
     row_ptr.resize(0);
     col_idx.resize(0);
-    SyncMem::clear_cache();
+    tmp_buffer.resize(0);
+    //SyncMem::clear_cache();
     int gpu_num;
     cudaError_t err = cudaGetDeviceCount(&gpu_num);
     std::atexit([]() { SyncMem::clear_cache(); });
@@ -160,7 +161,11 @@ void SparseColumns::csr2csc_gpu(
         //cub_seg_sort_by_key(columns.csc_val, columns.csc_row_idx,
         //                    columns.csc_col_ptr, false);
     });
-
+    
+    csc_val.resize(0);
+    csc_col_ptr.resize(0);
+    csc_row_idx.resize(0);
+    SyncMem::clear_cache();
     auto t_end = timer.now();
     std::chrono::duration<float> used_time = t_end - t_start;
     LOG(INFO) << "Converting csr to csc using time: " << used_time.count()
