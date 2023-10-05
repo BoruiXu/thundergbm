@@ -78,10 +78,6 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
                                     val.device_data(),row_ptr.device_data(),col_idx.device_data(),
                                     data_type, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, &buffer_size);
     SyncArray<char> tmp_buffer(buffer_size);
-        size_t free, total;
-        cudaMemGetInfo(&free, &total);
-        free = free/1e9;
-        LOG(INFO)<<"free mem is "<<free<<" G";
     LOG(INFO)<<"buffer size is "<<buffer_size/1e9<<" G";
     cusparseCsr2cscEx2(handle, n_feature, n_instance, nnz, 
                             csc_val.device_data(),csc_col_ptr.device_data(),csc_row_idx.device_data(),
@@ -102,21 +98,22 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
 }
 
 //csc to csr on cpu
-void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,char *host_csc_val,
-            int *host_row_ptr,int *host_col_idx,char *host_val, 
+void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,float *host_csc_val,
+            int *host_row_ptr,int *host_col_idx,float *host_val, 
             int n_instance, int n_feature,size_t nnz){
     LOG(INFO)<<"run csc to csr in cpu...";
     
     //initialize row_ptr
     //memset 0
     memset(host_row_ptr,0,sizeof(int)*(n_instance+1));
-
+    int *tmp_loc = new int[nnz];
     #pragma omp parallel for
     for(int i=0;i<nnz;i++){
         int idx = host_csc_row_idx[i]+1;
-    
-        #pragma omp atomic
-        host_row_ptr[idx]++;
+        //tmp_loc[i] = host_row_ptr[idx];
+        
+        #pragma omp atomic capture
+        tmp_loc[i] = host_row_ptr[idx]++;
     }
 
     for(int i=1;i<n_instance+1;i++){
@@ -124,16 +121,6 @@ void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,char *host_csc_val,
     }
 
     //parallel construct csr_col and csr_val
-    #pragma omp parallel for
-    for(int i= 0;i<n_instance;++i){
-        int start = host_row_ptr[i];
-        int end = host_row_ptr[i+1];
-
-        for(int j=start;j<end;j++){
-            host_col_idx[j] = i;
-            host_val[j] = host_csc_val[j];
-        }
-    }
 
     #pragma omp parallel for
     for(int i=0;i<n_feature;i++){
@@ -141,18 +128,11 @@ void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,char *host_csc_val,
         int end = host_csc_col_ptr[i+1];
         for(int j=start;j<end;j++){
             int idx = host_csc_row_idx[j];
-            int pos = host_row_ptr[idx];
+            int pos = host_row_ptr[idx]+tmp_loc[j];
             host_col_idx[pos] = i;
             host_val[pos] = host_csc_val[j];
-            #pragma omp atomic
-            host_row_ptr[idx]++;
         }
     }
-    //rcover row_ptr
-    for(int i=n_instance;i>0;i--){
-        host_row_ptr[i] = host_row_ptr[i-1];
-    }
-    host_row_ptr[0] = 0;    
 }
 
 void HistTreeBuilder::get_bin_ids() {
@@ -210,15 +190,33 @@ void HistTreeBuilder::get_bin_ids() {
         }
         //csc2csr
         //get rest gpu mem 
-        size_t free, total;
+        //TODO when on multi devices this should be modified
+        size_t free, total,dataset_size;
         cudaMemGetInfo(&free, &total);
-        free = free/1e9;
+        free = 1.0*free/1e9;
+        dataset_size = (nnz*4*2+n_column*4)/1e9;
         LOG(INFO)<<"free mem is "<<free<<" G";
-        LOG(INFO)<<"csc dataset size is "<<(nnz*4*2+n_column*4)/1e9<<" G";
+        LOG(INFO)<<"csc dataset size is "<<dataset_size<<" G";
+        if(2.5*dataset_size>free){
+            use_gpu = false;
+        }
 
-        csc2csr(columns.csc_col_ptr_origin,columns.csc_row_idx_origin,bin_id_origin,
-                csr_row_ptr,csr_col_idx,csr_bin_id,
-                n_instances,n_column);
+        if(use_gpu){
+            csc2csr(columns.csc_col_ptr_origin,columns.csc_row_idx_origin,bin_id_origin,
+                    csr_row_ptr,csr_col_idx,csr_bin_id,
+                    n_instances,n_column);
+        }
+        else{
+            //set size 
+            csr_row_ptr.resize(n_instances+1);
+            csr_col_idx.resize(nnz);
+            csr_bin_id.resize(nnz);
+            csc2csr_cpu(columns.csc_col_ptr_origin.host_data(),columns.csc_row_idx_origin.host_data(),bin_id_origin.host_data(),
+                        csr_row_ptr.host_data(),csr_col_idx.host_data(),csr_bin_id.host_data(),
+                        n_instances,n_column,nnz);
+        }
+        LOG(INFO)<<"last row ptr is "<<csr_row_ptr.host_data()[n_instances];
+
 
         auto max_num_bin = param.max_num_bin;
         
