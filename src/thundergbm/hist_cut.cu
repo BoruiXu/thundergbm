@@ -181,6 +181,8 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
             target_arr_device[i] = (float)target_arr_double_device[i];
 
         });
+        target_arr_double.resize(0);
+        //SyncMem::clear_cache(); 
     }
 }
 
@@ -233,7 +235,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
         atomicAdd(cut_row_ptr_data + cut_fid_data[fid] + 1, 1);
     });
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
-    
+    SyncMem::clear_cache(); 
     LOG(DEBUG) << "--->>>>  cut points value: " << cut_points_val;
     LOG(DEBUG) << "--->>>> cut row ptr: " << cut_row_ptr;
     LOG(DEBUG) << "--->>>> cut fid: " << cut_fid;

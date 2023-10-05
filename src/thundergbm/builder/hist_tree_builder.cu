@@ -12,6 +12,7 @@
 #include "thrust/binary_search.h"
 #include "thundergbm/util/multi_device.h"
 
+#include "omp.h"
 #include "cusparse.h"
 #include <chrono>
 #include<iostream>
@@ -55,7 +56,6 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
 
     //val1.resize(nnz);
     //val2.resize(nnz);
-
     val.resize(nnz);
     col_idx.resize(nnz);
     row_ptr.resize(n_instance+1);
@@ -68,7 +68,6 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
     cusparseCreateMatDescr(&descr);
     cusparseSetMatIndexBase(descr, CUSPARSE_INDEX_BASE_ZERO);
     cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL);
-    
     //char
     cudaDataType data_type = CUDA_R_32F;//other datatype cause wrong?
     cusparseStatus_t status;
@@ -78,8 +77,12 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
                                     csc_val.device_data(),csc_col_ptr.device_data(),csc_row_idx.device_data(),
                                     val.device_data(),row_ptr.device_data(),col_idx.device_data(),
                                     data_type, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, &buffer_size);
-
     SyncArray<char> tmp_buffer(buffer_size);
+        size_t free, total;
+        cudaMemGetInfo(&free, &total);
+        free = free/1e9;
+        LOG(INFO)<<"free mem is "<<free<<" G";
+    LOG(INFO)<<"buffer size is "<<buffer_size/1e9<<" G";
     cusparseCsr2cscEx2(handle, n_feature, n_instance, nnz, 
                             csc_val.device_data(),csc_col_ptr.device_data(),csc_row_idx.device_data(),
                             val.device_data(),row_ptr.device_data(),col_idx.device_data(),
@@ -89,13 +92,69 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
     LOG(INFO)<<"return status is "<<status;
     cusparseDestroy(handle);
     cusparseDestroyMatDescr(descr);
-
+    tmp_buffer.resize(0);
+    SyncMem::clear_cache();
     //csc_val.resize(0);
     //csc_col_ptr.resize(0);
     //csc_row_idx.resize(0);
 
 
 }
+
+//csc to csr on cpu
+void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,char *host_csc_val,
+            int *host_row_ptr,int *host_col_idx,char *host_val, 
+            int n_instance, int n_feature,size_t nnz){
+    LOG(INFO)<<"run csc to csr in cpu...";
+    
+    //initialize row_ptr
+    //memset 0
+    memset(host_row_ptr,0,sizeof(int)*(n_instance+1));
+
+    #pragma omp parallel for
+    for(int i=0;i<nnz;i++){
+        int idx = host_csc_row_idx[i]+1;
+    
+        #pragma omp atomic
+        host_row_ptr[idx]++;
+    }
+
+    for(int i=1;i<n_instance+1;i++){
+        host_row_ptr[i] += host_row_ptr[i-1];
+    }
+
+    //parallel construct csr_col and csr_val
+    #pragma omp parallel for
+    for(int i= 0;i<n_instance;++i){
+        int start = host_row_ptr[i];
+        int end = host_row_ptr[i+1];
+
+        for(int j=start;j<end;j++){
+            host_col_idx[j] = i;
+            host_val[j] = host_csc_val[j];
+        }
+    }
+
+    #pragma omp parallel for
+    for(int i=0;i<n_feature;i++){
+        int start = host_csc_col_ptr[i];
+        int end = host_csc_col_ptr[i+1];
+        for(int j=start;j<end;j++){
+            int idx = host_csc_row_idx[j];
+            int pos = host_row_ptr[idx];
+            host_col_idx[pos] = i;
+            host_val[pos] = host_csc_val[j];
+            #pragma omp atomic
+            host_row_ptr[idx]++;
+        }
+    }
+    //rcover row_ptr
+    for(int i=n_instance;i>0;i--){
+        host_row_ptr[i] = host_row_ptr[i-1];
+    }
+    host_row_ptr[0] = 0;    
+}
+
 void HistTreeBuilder::get_bin_ids() {
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         SparseColumns &columns = shards[device_id].columns;
@@ -103,7 +162,7 @@ void HistTreeBuilder::get_bin_ids() {
         auto &dense_bin_id = this->dense_bin_id[device_id];
         using namespace thrust;
         int n_column = columns.n_column;
-        int nnz = columns.nnz;
+        size_t nnz = columns.nnz;
         auto cut_row_ptr = cut.cut_row_ptr.device_data();
         auto cut_points_ptr = cut.cut_points_val.device_data();
         //auto csc_val_data = columns.csc_val.device_data();
@@ -111,14 +170,12 @@ void HistTreeBuilder::get_bin_ids() {
         bin_id.resize(columns.nnz);
         auto bin_id_data = bin_id.device_data();
         int n_block = fminf((nnz / n_column - 1) / 256 + 1, 4 * 56);
-
         //original order csc
         auto csc_val_origin_data = columns.csc_val_origin.device_data();
         //SyncArray<float> bin_id_origin;
         auto &bin_id_origin = this->bin_id_origin[device_id];
         bin_id_origin.resize(columns.nnz);
         auto bin_id_origin_data = bin_id_origin.device_data();
-
         auto &csr_row_ptr = this->csr_row_ptr[device_id];
         auto &csr_col_idx = this->csr_col_idx[device_id];
         auto &csr_bin_id  = this->csr_bin_id[device_id];
@@ -152,24 +209,19 @@ void HistTreeBuilder::get_bin_ids() {
 
         }
         //csc2csr
+        //get rest gpu mem 
+        size_t free, total;
+        cudaMemGetInfo(&free, &total);
+        free = free/1e9;
+        LOG(INFO)<<"free mem is "<<free<<" G";
+        LOG(INFO)<<"csc dataset size is "<<(nnz*4*2+n_column*4)/1e9<<" G";
+
         csc2csr(columns.csc_col_ptr_origin,columns.csc_row_idx_origin,bin_id_origin,
                 csr_row_ptr,csr_col_idx,csr_bin_id,
                 n_instances,n_column);
 
         auto max_num_bin = param.max_num_bin;
         
-        //long long total_size = (long long)20*(long long)1024*(long long)1024*(long long)1024;//10GB
-
-        //size_t row_part_size = total_size/n_column;
-        ////int loop_num = n_instances/row_part_size+1;
-        //size_t current_dense_size = (row_part_size)*(long long)n_column;
-        //
-        //dense_bin_id.resize(current_dense_size);
-        //auto dense_bin_id_data = dense_bin_id.device_data();
-        //
-        //device_loop(current_dense_size, [=]__device__(size_t i) {
-        //    dense_bin_id_data[i] = max_num_bin;
-        //});
         
         //here 32 is the max nodes in one level
         size_t current_dense_size = (long long)n_instances*32;
@@ -784,13 +836,13 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     csr_col_idx = MSyncArray<int>(param.n_device);
 
     bin_id_origin = MSyncArray<float_type>(param.n_device);
-
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         if(dataset.use_cpu)
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
         else
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
+        LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
     });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
