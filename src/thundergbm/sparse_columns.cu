@@ -88,19 +88,19 @@ void SparseColumns::csr2csc_gpu(
     //LOG(INFO)<<"1st feature range "<<csc_col_ptr.host_data()[0]<<" "<<csc_col_ptr.host_data()[1];
 
     //check none-zero feature
-    int tmp = 0;
-    for(int i=0;i<n_column+1;++i){
-        if(csc_col_ptr.host_data()[i+1]-csc_col_ptr.host_data()[i]>0){
-            tmp++;
-        }
-    }
+    //int tmp = 0;
+    //for(int i=0;i<n_column+1;++i){
+    //    if(csc_col_ptr.host_data()[i+1]-csc_col_ptr.host_data()[i]>0){
+    //        tmp++;
+    //    }
+    //}
 
     ////check convert before
     //LOG(INFO)<<"last col idex "<<col_idx.host_data()[nnz-1];
     //
 
     //
-    LOG(INFO)<<"none-zero feature num is "<<tmp;
+    //LOG(INFO)<<"none-zero feature num is "<<tmp;
 
     val.resize(0);
     row_ptr.resize(0);

@@ -45,6 +45,8 @@ private:
     int total_hist_num = 0;
     double total_dp_time = 0;
     double total_copy_time = 0;
+    bool use_gpu = 1;
+
 };
 
 

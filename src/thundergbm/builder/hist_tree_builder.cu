@@ -12,6 +12,7 @@
 #include "thrust/binary_search.h"
 #include "thundergbm/util/multi_device.h"
 
+#include "thundergbm/util/sp_trans.h"
 #include "omp.h"
 #include "cusparse.h"
 #include <chrono>
@@ -98,8 +99,8 @@ void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<f
 }
 
 //csc to csr on cpu
-void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,float *host_csc_val,
-            int *host_row_ptr,int *host_col_idx,float *host_val, 
+void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,float_type *host_csc_val,
+            int *host_row_ptr,int *host_col_idx,float_type *host_val, 
             int n_instance, int n_feature,size_t nnz){
     LOG(INFO)<<"run csc to csr in cpu...";
     
@@ -214,9 +215,11 @@ void HistTreeBuilder::get_bin_ids() {
             csc2csr_cpu(columns.csc_col_ptr_origin.host_data(),columns.csc_row_idx_origin.host_data(),bin_id_origin.host_data(),
                         csr_row_ptr.host_data(),csr_col_idx.host_data(),csr_bin_id.host_data(),
                         n_instances,n_column,nnz);
+            //LOG(INFO)<<"csc to csr using cpu..."; 
+            //sptrans_scanTrans<int,float_type>(n_column, n_instances, nnz,
+            //                                columns.csc_col_ptr_origin.host_data(), columns.csc_row_idx_origin.host_data(), bin_id_origin.host_data(), 
+            //                                csr_col_idx.host_data(), csr_row_ptr.host_data(), csr_bin_id.host_data());
         }
-        LOG(INFO)<<"last row ptr is "<<csr_row_ptr.host_data()[n_instances];
-
 
         auto max_num_bin = param.max_num_bin;
         

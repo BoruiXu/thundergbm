@@ -21,7 +21,7 @@ public:
     int n_column;
     int n_row;
     int column_offset;
-    int nnz;
+    size_t nnz;
 
     void csr2csc_gpu(const DataSet &dataSet, vector<std::unique_ptr<SparseColumns>> &);
     void csr2csc_cpu(const DataSet &dataset, vector<std::unique_ptr<SparseColumns>> &);
