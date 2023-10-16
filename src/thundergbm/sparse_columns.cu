@@ -158,8 +158,8 @@ void SparseColumns::csr2csc_gpu(
         //columns.csc_col_ptr_origin.copy_from(columns.csc_col_ptr.host_data(),n_column_sub + 1);
         // correct segment start positions
         //LOG(TRACE) << "sorting feature values (multi-device)";
-        //cub_seg_sort_by_key(columns.csc_val, columns.csc_row_idx,
-        //                    columns.csc_col_ptr, false);
+        cub_seg_sort_by_key(columns.csc_val_origin, columns.csc_row_idx_origin,
+                            columns.csc_col_ptr_origin, false);
     });
     
     csc_val.resize(0);

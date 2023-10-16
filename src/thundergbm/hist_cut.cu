@@ -97,6 +97,7 @@ void syncarray_resize(SyncArray<T> &buf_array, int new_size) {
     tmp_array.copy_from(buf_array.device_data(), new_size);
     buf_array.resize(new_size);
     buf_array.copy_from(tmp_array);
+    tmp_array.resize(0);
 }
 
 void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_columns) {
@@ -123,7 +124,7 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
                           flags.device_data(),
                           target_arr.device_data(),
                           (_1 + _2 * (max_elem + 1)));
-        // 2. sort the transformed data
+        // 2. sort the transformed data //make same value in same feature together
         sort_array(target_arr, false);
         thrust::reverse(thrust::device, flags.device_data(), flags.device_end());
         // 3. eliminate duplicates
@@ -186,6 +187,33 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
     }
 }
 
+//new func
+void unique_by_flag2 (SyncArray<float> &target_arr, SyncArray<int> &flags, int n_columns){
+
+    auto traget_arr_data = target_arr.device_data();
+    auto flags_data = flags.device_data();
+    size_t len = flags.size();
+
+    //typedef thrust::device_vector<int>::iterator   IntIterator;
+    //typedef thrust::device_vector<float>::iterator FloatIterator;
+    //typedef thrust::tuple<FloatIterator, IntIterator> IteratorTuple;
+    //typedef thrust::zip_iterator<IteratorTuple> ZipIterator;
+    //ZipIterator iter(thrust::make_tuple(keys.begin(), values.begin()));
+    
+    //make zip
+    auto zip_array = thrust::make_zip_iterator(thrust::make_tuple(traget_arr_data, flags_data));
+    
+    //unique
+    auto new_end = thrust::unique(thrust::device,zip_array,zip_array+len);
+
+    //new size 
+    size_t new_size = new_end-zip_array;
+
+    syncarray_resize(target_arr, new_size);
+    syncarray_resize(flags, new_size);
+
+
+}
 /**
  * fast but cost more memory
  */
@@ -204,7 +232,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
         cut_fid_data[i] = fid;
     },block_num);
     
-    unique_by_flag(cut_points_val, cut_fid, n_column);
+    unique_by_flag2(cut_points_val, cut_fid, n_column);
 
     cut_row_ptr.resize(n_column + 1);
     auto cut_row_ptr_data = cut_row_ptr.device_data();
