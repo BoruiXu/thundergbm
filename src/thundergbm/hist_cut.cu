@@ -193,12 +193,6 @@ void unique_by_flag2 (SyncArray<float> &target_arr, SyncArray<int> &flags, int n
     auto traget_arr_data = target_arr.device_data();
     auto flags_data = flags.device_data();
     size_t len = flags.size();
-
-    //typedef thrust::device_vector<int>::iterator   IntIterator;
-    //typedef thrust::device_vector<float>::iterator FloatIterator;
-    //typedef thrust::tuple<FloatIterator, IntIterator> IteratorTuple;
-    //typedef thrust::zip_iterator<IteratorTuple> ZipIterator;
-    //ZipIterator iter(thrust::make_tuple(keys.begin(), values.begin()));
     
     //make zip
     auto zip_array = thrust::make_zip_iterator(thrust::make_tuple(traget_arr_data, flags_data));
@@ -231,7 +225,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
     device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=] __device__(int fid, int i) {
         cut_fid_data[i] = fid;
     },block_num);
-    
+     
     unique_by_flag2(cut_points_val, cut_fid, n_column);
 
     cut_row_ptr.resize(n_column + 1);

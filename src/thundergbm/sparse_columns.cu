@@ -106,7 +106,7 @@ void SparseColumns::csr2csc_gpu(
     row_ptr.resize(0);
     col_idx.resize(0);
     tmp_buffer.resize(0);
-    //SyncMem::clear_cache();
+    SyncMem::clear_cache();
     int gpu_num;
     cudaError_t err = cudaGetDeviceCount(&gpu_num);
     std::atexit([]() { SyncMem::clear_cache(); });
@@ -144,17 +144,16 @@ void SparseColumns::csr2csc_gpu(
         //                              n_column_sub + 1);
 
         //origin
-        columns.csc_val_origin.copy_from(csc_val.host_data() + first_col_start,
+        columns.csc_val_origin.copy_from(csc_val.device_data() + first_col_start,
                                   nnz_sub);
-        columns.csc_row_idx_origin.copy_from(csc_row_idx.host_data() + first_col_start,
+        columns.csc_row_idx_origin.copy_from(csc_row_idx.device_data() + first_col_start,
                                       nnz_sub);
-        columns.csc_col_ptr_origin.copy_from(csc_col_ptr.host_data() + first_col_id,
+        columns.csc_col_ptr_origin.copy_from(csc_col_ptr.device_data() + first_col_id,
                                       n_column_sub + 1);
         
 
         int *csc_col_ptr_2d_data = columns.csc_col_ptr_origin.device_data();
         correct_start(csc_col_ptr_2d_data, first_col_start, n_column_sub);
-         
         //columns.csc_col_ptr_origin.copy_from(columns.csc_col_ptr.host_data(),n_column_sub + 1);
         // correct segment start positions
         //LOG(TRACE) << "sorting feature values (multi-device)";

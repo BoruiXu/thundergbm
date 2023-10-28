@@ -198,7 +198,7 @@ void HistTreeBuilder::get_bin_ids() {
         dataset_size = (nnz*4*2+n_column*4)/1e9;
         LOG(INFO)<<"free mem is "<<free<<" G";
         LOG(INFO)<<"csc dataset size is "<<dataset_size<<" G";
-        if(2.5*dataset_size>free){
+        if(2.6*dataset_size>free){
             use_gpu = false;
         }
         if(use_gpu){
@@ -353,8 +353,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             auto compute_gain = []__device__(GHPair father, GHPair lch, GHPair rch, float_type min_child_weight,
                                     float_type lambda) -> float_type {
                                     if (lch.h >= min_child_weight && rch.h >= min_child_weight)
-                                    return (lch.g * lch.g) / (lch.h + lambda) + (rch.g * rch.g) / (rch.h + lambda) -
-                            (father.g * father.g) / (father.h + lambda);
+                                    return (lch.g * lch.g) / (lch.h + lambda) + (rch.g * rch.g) / (rch.h + lambda)
+                                                -(father.g * father.g) / (father.h + lambda);
                                     else
                                     return 0;
                             };
@@ -638,8 +638,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 auto compute_gain = []__device__(GHPair father, GHPair lch, GHPair rch, float_type min_child_weight,
                                         float_type lambda) -> float_type {
                                         if (lch.h >= min_child_weight && rch.h >= min_child_weight)
-                                        return (lch.g * lch.g) / (lch.h + lambda) + (rch.g * rch.g) / (rch.h + lambda) -
-                                (father.g * father.g) / (father.h + lambda);
+                                        return (lch.g * lch.g) / (lch.h + lambda) + (rch.g * rch.g) / (rch.h + lambda)
+                                                -(father.g * father.g) / (father.h + lambda);
                                         else
                                         return 0;
                                 };
@@ -845,6 +845,10 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
         LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
+        auto y_host = y_predict[device_id].host_data();
+        for(int i =0;i<y_predict[device_id].size();i++){
+            y_host[i] = -0.975106f;
+        }
     });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
