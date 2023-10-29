@@ -10,6 +10,15 @@
 #include "thundergbm/util/device_lambda.cuh"
 #include "thundergbm/util/multi_device.h"
 
+#include <chrono>
+#include<iostream>
+typedef std::chrono::high_resolution_clock Clock;
+#define TDEF(x_) std::chrono::high_resolution_clock::time_point x_##_t0, x_##_t1;
+#define TSTART(x_) x_##_t0 = Clock::now();
+#define TEND(x_) x_##_t1 = Clock::now();
+#define TPRINT(x_, str) printf("%-20s \t%.6f\t sec\n", str, std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()/1e6);
+#define TINT(x_) std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()
+
 // FIXME remove this function
 void correct_start(int *csc_col_ptr_2d_data, int first_col_start,
                    int n_column_sub) {
@@ -83,28 +92,10 @@ void SparseColumns::csr2csc_gpu(
     cudaDeviceSynchronize();
     cusparseDestroy(handle);
     cusparseDestroyMatDescr(descr);
-    ////转换存在问题，kdda的时候第一个特征的范围转换之后不对了
-    //LOG(INFO)<<"test convert correctness";
-    //LOG(INFO)<<"1st feature range "<<csc_col_ptr.host_data()[0]<<" "<<csc_col_ptr.host_data()[1];
 
-    //check none-zero feature
-    //int tmp = 0;
-    //for(int i=0;i<n_column+1;++i){
-    //    if(csc_col_ptr.host_data()[i+1]-csc_col_ptr.host_data()[i]>0){
-    //        tmp++;
-    //    }
-    //}
-
-    ////check convert before
-    //LOG(INFO)<<"last col idex "<<col_idx.host_data()[nnz-1];
-    //
-
-    //
-    //LOG(INFO)<<"none-zero feature num is "<<tmp;
-
-    val.resize(0);
-    row_ptr.resize(0);
-    col_idx.resize(0);
+    //val.resize(0);
+    //row_ptr.resize(0);
+    //col_idx.resize(0);
     tmp_buffer.resize(0);
     SyncMem::clear_cache();
     int gpu_num;
@@ -115,15 +106,22 @@ void SparseColumns::csr2csc_gpu(
     int ave_n_columns = n_column / n_device;
     DO_ON_MULTI_DEVICES(n_device, [&](int device_id) {
         SparseColumns &columns = *v_columns[device_id];
-        const int *csc_col_ptr_data = csc_col_ptr.host_data();
-        int first_col_id = device_id * ave_n_columns;
-        int n_column_sub = (device_id < n_device - 1) ? ave_n_columns
+
+        int first_col_id = 0;
+        int first_col_start = 0;
+        int n_column_sub = csc_col_ptr.size()-1;
+        int nnz_sub = csc_val.size();
+        if(n_device>1){
+            const int *csc_col_ptr_data = csc_col_ptr.host_data();
+            first_col_id = device_id * ave_n_columns;
+            n_column_sub = (device_id < n_device - 1) ? ave_n_columns
                                                       : n_column - first_col_id;
-        int first_col_start = csc_col_ptr_data[first_col_id];
-        int nnz_sub = (device_id < n_device - 1)
+            first_col_start = csc_col_ptr_data[first_col_id];
+            nnz_sub = (device_id < n_device - 1)
                           ? (csc_col_ptr_data[(device_id + 1) * ave_n_columns] -
                              first_col_start)
                           : (nnz - first_col_start);
+        }
         columns.column_offset = first_col_id + this->column_offset;
         columns.nnz = nnz_sub;
         columns.n_column = n_column_sub;
@@ -131,6 +129,16 @@ void SparseColumns::csr2csc_gpu(
         //columns.csc_val.resize(nnz_sub);
         //columns.csc_row_idx.resize(nnz_sub);
         //columns.csc_col_ptr.resize(n_column_sub + 1);
+        //csr data
+        columns.csr_val.resize(nnz_sub);
+        columns.csr_row_ptr.resize(dataset.csr_row_ptr.size());
+        columns.csr_col_idx.resize(nnz_sub);
+        
+        //csr copy
+        columns.csr_val.copy_from(val.device_data(),nnz_sub);
+        columns.csr_col_idx.copy_from(col_idx.device_data(),nnz_sub);
+        columns.csr_row_ptr.copy_from(row_ptr.device_data(),dataset.csr_row_ptr.size());
+
 
         columns.csc_val_origin.resize(nnz_sub);
         columns.csc_row_idx_origin.resize(nnz_sub);
@@ -151,19 +159,22 @@ void SparseColumns::csr2csc_gpu(
         columns.csc_col_ptr_origin.copy_from(csc_col_ptr.device_data() + first_col_id,
                                       n_column_sub + 1);
         
-
         int *csc_col_ptr_2d_data = columns.csc_col_ptr_origin.device_data();
         correct_start(csc_col_ptr_2d_data, first_col_start, n_column_sub);
         //columns.csc_col_ptr_origin.copy_from(columns.csc_col_ptr.host_data(),n_column_sub + 1);
         // correct segment start positions
         //LOG(TRACE) << "sorting feature values (multi-device)";
-        cub_seg_sort_by_key(columns.csc_val_origin, columns.csc_row_idx_origin,
-                            columns.csc_col_ptr_origin, false);
+        //cub_seg_sort_by_key(columns.csc_val_origin, columns.csc_row_idx_origin,
+        //                    columns.csc_col_ptr_origin, false);
     });
-    
     csc_val.resize(0);
     csc_col_ptr.resize(0);
     csc_row_idx.resize(0);
+    //set pointer?
+    val.resize(0);
+    col_idx.resize(0);
+    row_ptr.resize(0);
+    //consume much time when cub_seg_sort_by_key
     SyncMem::clear_cache();
     auto t_end = timer.now();
     std::chrono::duration<float> used_time = t_end - t_start;

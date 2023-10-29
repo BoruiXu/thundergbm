@@ -18,6 +18,12 @@ public:
     SyncArray<float_type> csc_val_origin;
     SyncArray<int> csc_row_idx_origin;
     SyncArray<int> csc_col_ptr_origin;
+    
+    //csr data
+    SyncArray<float_type> csr_val;
+    SyncArray<int> csr_row_ptr;
+    SyncArray<int> csr_col_idx;
+
     int n_column;
     int n_row;
     int column_offset;

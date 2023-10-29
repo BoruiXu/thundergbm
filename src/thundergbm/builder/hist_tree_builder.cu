@@ -160,6 +160,15 @@ void HistTreeBuilder::get_bin_ids() {
         auto &csr_row_ptr = this->csr_row_ptr[device_id];
         auto &csr_col_idx = this->csr_col_idx[device_id];
         auto &csr_bin_id  = this->csr_bin_id[device_id];
+
+        //set poniter
+        csr_row_ptr.resize(n_instances+1);
+        csr_col_idx.resize(nnz);
+        csr_bin_id.resize(nnz);
+        
+        csr_row_ptr.set_device_data(columns.csr_row_ptr.device_data());
+        csr_col_idx.set_device_data(columns.csr_col_idx.device_data());
+
         {
             auto lowerBound = [=]__device__(const float_type *search_begin, const float_type *search_end, float_type val) {
                 const float_type *left = search_begin;
@@ -188,37 +197,50 @@ void HistTreeBuilder::get_bin_ids() {
                 bin_id_origin_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
             }, n_block);
 
+            //get csr bin id
+            auto csr_col_idx_data = csr_col_idx.device_data();
+            auto csr_val_data = columns.csr_val.device_data();
+            auto csr_bin_id_data = csr_bin_id.device_data();
+            device_loop_2d(n_instances, csr_row_ptr.device_data(), [=]__device__(int instance_id, int i) {
+                auto cid = csr_col_idx_data[i];
+                auto search_begin = cut_points_ptr + cut_row_ptr[cid];
+                auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
+                auto val = csr_val_data[i];
+                csr_bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
+            }, n_block);
+
         }
         //csc2csr
         //get rest gpu mem 
         //TODO when on multi devices this should be modified
-        size_t free, total,dataset_size;
-        cudaMemGetInfo(&free, &total);
-        free = 1.0*free/1e9;
-        dataset_size = (nnz*4*2+n_column*4)/1e9;
-        LOG(INFO)<<"free mem is "<<free<<" G";
-        LOG(INFO)<<"csc dataset size is "<<dataset_size<<" G";
-        if(2.6*dataset_size>free){
-            use_gpu = false;
-        }
-        if(use_gpu){
-            csc2csr(columns.csc_col_ptr_origin,columns.csc_row_idx_origin,bin_id_origin,
-                    csr_row_ptr,csr_col_idx,csr_bin_id,
-                    n_instances,n_column);
-        }
-        else{
-            //set size 
-            csr_row_ptr.resize(n_instances+1);
-            csr_col_idx.resize(nnz);
-            csr_bin_id.resize(nnz);
-            csc2csr_cpu(columns.csc_col_ptr_origin.host_data(),columns.csc_row_idx_origin.host_data(),bin_id_origin.host_data(),
-                        csr_row_ptr.host_data(),csr_col_idx.host_data(),csr_bin_id.host_data(),
-                        n_instances,n_column,nnz);
-            //LOG(INFO)<<"csc to csr using cpu..."; 
-            //sptrans_scanTrans<int,float_type>(n_column, n_instances, nnz,
-            //                                columns.csc_col_ptr_origin.host_data(), columns.csc_row_idx_origin.host_data(), bin_id_origin.host_data(), 
-            //                                csr_col_idx.host_data(), csr_row_ptr.host_data(), csr_bin_id.host_data());
-        }
+        
+        //size_t free, total,dataset_size;
+        //cudaMemGetInfo(&free, &total);
+        //free = 1.0*free/1e9;
+        //dataset_size = (nnz*4*2+n_column*4)/1e9;
+        //LOG(INFO)<<"free mem is "<<free<<" G";
+        //LOG(INFO)<<"csc dataset size is "<<dataset_size<<" G";
+        //if(2.6*dataset_size>free){
+        //    use_gpu = false;
+        //}
+        //if(use_gpu){
+        //    csc2csr(columns.csc_col_ptr_origin,columns.csc_row_idx_origin,bin_id_origin,
+        //            csr_row_ptr,csr_col_idx,csr_bin_id,
+        //            n_instances,n_column);
+        //}
+        //else{
+        //    //set size 
+        //    csr_row_ptr.resize(n_instances+1);
+        //    csr_col_idx.resize(nnz);
+        //    csr_bin_id.resize(nnz);
+        //    csc2csr_cpu(columns.csc_col_ptr_origin.host_data(),columns.csc_row_idx_origin.host_data(),bin_id_origin.host_data(),
+        //                csr_row_ptr.host_data(),csr_col_idx.host_data(),csr_bin_id.host_data(),
+        //                n_instances,n_column,nnz);
+        //    //LOG(INFO)<<"csc to csr using cpu..."; 
+        //    //sptrans_scanTrans<int,float_type>(n_column, n_instances, nnz,
+        //    //                                columns.csc_col_ptr_origin.host_data(), columns.csc_row_idx_origin.host_data(), bin_id_origin.host_data(), 
+        //    //                                csr_col_idx.host_data(), csr_row_ptr.host_data(), csr_bin_id.host_data());
+        //}
         //columns.csc_val_origin.clear_device();
         columns.csc_val_origin.resize(0);
         SyncMem::clear_cache();
@@ -845,10 +867,10 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
         LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
-        auto y_host = y_predict[device_id].host_data();
-        for(int i =0;i<y_predict[device_id].size();i++){
-            y_host[i] = -0.975106f;
-        }
+        //auto y_host = y_predict[device_id].host_data();
+        //for(int i =0;i<y_predict[device_id].size();i++){
+        //    y_host[i] = -0.975106f;
+        //}
     });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
