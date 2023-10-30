@@ -161,6 +161,16 @@ void unique_by_flag(SyncArray<float> &target_arr, SyncArray<int> &flags, int n_c
     
 }
 
+//define sort opeartion
+typedef thrust::tuple<float, int> float_int;
+struct Op {
+  __device__ bool operator()(const float_int &a, const float_int &b) {
+    if (thrust::get<1>(a) == thrust::get<1>(b)) {
+        return thrust::get<0>(a) > thrust::get<0>(b);
+    }
+    return thrust::get<1>(a) < thrust::get<1>(b);
+  }
+};
 //new func
 void unique_by_flag2 (SyncArray<float> &target_arr, SyncArray<int> &flags, int n_columns){
 
@@ -168,9 +178,13 @@ void unique_by_flag2 (SyncArray<float> &target_arr, SyncArray<int> &flags, int n
     auto flags_data = flags.device_data();
     size_t len = flags.size();
     
+
     //make zip
     auto zip_array = thrust::make_zip_iterator(thrust::make_tuple(traget_arr_data, flags_data));
     
+    //sort
+    thrust::sort(thrust::device,zip_array,zip_array+len,Op());
+
     //unique
     auto new_end = thrust::unique(thrust::device,zip_array,zip_array+len);
 
