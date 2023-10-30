@@ -206,7 +206,7 @@ void HistTreeBuilder::get_bin_ids() {
                 auto search_begin = cut_points_ptr + cut_row_ptr[cid];
                 auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
                 auto val = csr_val_data[i];
-                csr_bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
+                csr_bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
             }, n_block);
 
         }
@@ -243,6 +243,7 @@ void HistTreeBuilder::get_bin_ids() {
         //}
         //columns.csc_val_origin.clear_device();
         columns.csc_val_origin.resize(0);
+        columns.csr_val.resize(0);
         SyncMem::clear_cache();
         auto max_num_bin = param.max_num_bin;
         
@@ -329,13 +330,13 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         auto n_instances = this->n_instances;
                         device_loop_hist_csr_root(n_instances,csr_row_ptr_data, [=]__device__(int i,int j){
                         
-                            int fid = csr_col_idx_data[j];
+                            //int fid = csr_col_idx_data[j];
                             int bid = (int)csr_bin_id_data[j];
                             
-                            int feature_offset = cut_row_ptr_data[fid];
+                            //int feature_offset = cut_row_ptr_data[fid];
                             const GHPair src = gh_data[i];
-                            //GHPair &dest = hist_test_data[feature_offset + bid]; 
-                            GHPair &dest = hist_data[feature_offset + bid]; 
+                            //GHPair &dest = hist_data[feature_offset + bid]; 
+                            GHPair &dest = hist_data[bid]; 
                             if(src.h != 0)
                                 atomicAdd(&dest.h, src.h);
                             if(src.g != 0)
@@ -562,12 +563,13 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                         int end = csr_row_ptr_data[iid+1];
 
                                         for(int j = begin+current_pos;j<end;j+=stride){
-                                            int fid = csr_col_idx_data[j];
+                                            //int fid = csr_col_idx_data[j];
                                             int bid = (int)csr_bin_id_data[j];
 
-                                            int feature_offset = cut_row_ptr_data[fid];
+                                            //int feature_offset = cut_row_ptr_data[fid];
                                             const GHPair src = gh_data[iid];
-                                            GHPair &dest = hist_data[feature_offset + bid];
+                                            //GHPair &dest = hist_data[feature_offset + bid];
+                                            GHPair &dest = hist_data[bid];
 
                                             if(src.h!= 0){
                                                 atomicAdd(&dest.h, src.h);
@@ -855,7 +857,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     last_hist = MSyncArray<GHPair>(param.n_device);
 
     //csr bin id
-    csr_bin_id = MSyncArray<float_type>(param.n_device);
+    csr_bin_id = MSyncArray<int>(param.n_device);
     csr_row_ptr = MSyncArray<int>(param.n_device);
     csr_col_idx = MSyncArray<int>(param.n_device);
 

@@ -35,7 +35,7 @@ private:
     MSyncArray<GHPair> last_hist;
 
     //store csr dense_bin_id
-    MSyncArray<float_type> csr_bin_id;
+    MSyncArray<int> csr_bin_id;
     MSyncArray<float_type> bin_id_origin; //csc format
     MSyncArray<int> csr_row_ptr;
     MSyncArray<int> csr_col_idx;
