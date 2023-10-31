@@ -863,11 +863,13 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
         LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
-        //auto y_host = y_predict[device_id].host_data();
-        //for(int i =0;i<y_predict[device_id].size();i++){
-        //    y_host[i] = -0.975106f;
-        //}
-    });
+        
+        //set data
+        auto y_predict_data = y_predict[device_id].device_data();
+        device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
+            y_predict_data[i] = -0.975106f;
+        });
+   });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
         v_columns[i].release();
