@@ -140,23 +140,21 @@ void HistTreeBuilder::get_bin_ids() {
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         SparseColumns &columns = shards[device_id].columns;
         HistCut &cut = this->cut[device_id];
-        auto &dense_bin_id = this->dense_bin_id[device_id];
+        //auto &dense_bin_id = this->dense_bin_id[device_id];
         using namespace thrust;
         int n_column = columns.n_column;
         size_t nnz = columns.nnz;
         auto cut_row_ptr = cut.cut_row_ptr.device_data();
         auto cut_points_ptr = cut.cut_points_val.device_data();
-        //auto csc_val_data = columns.csc_val.device_data();
-        //SyncArray<unsigned char> bin_id;
-        //bin_id.resize(columns.nnz);
-        //auto bin_id_data = bin_id.device_data();
+        
         int n_block = fminf((nnz / n_column - 1) / 256 + 1, 4 * 56);
         //original order csc
-        auto csc_val_origin_data = columns.csc_val_origin.device_data();
-        //SyncArray<float> bin_id_origin;
-        auto &bin_id_origin = this->bin_id_origin[device_id];
-        bin_id_origin.resize(columns.nnz);
-        auto bin_id_origin_data = bin_id_origin.device_data();
+        //auto csc_val_origin_data = columns.csc_val_origin.device_data();
+        
+        //auto &bin_id_origin = this->bin_id_origin[device_id];
+        //bin_id_origin.resize(columns.nnz);
+        //auto bin_id_origin_data = bin_id_origin.device_data();
+        
         auto &csr_row_ptr = this->csr_row_ptr[device_id];
         auto &csr_col_idx = this->csr_col_idx[device_id];
         auto &csr_bin_id  = this->csr_bin_id[device_id];
@@ -183,19 +181,13 @@ void HistTreeBuilder::get_bin_ids() {
                 return left;
             };
             TIMED_SCOPE(timerObj, "binning");
-            //device_loop_2d(n_column, columns.csc_col_ptr.device_data(), [=]__device__(int cid, int i) {
+            //for original order csc
+            //device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=]__device__(int cid, int i) {
             //    auto search_begin = cut_points_ptr + cut_row_ptr[cid];
             //    auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
-            //    auto val = csc_val_data[i];
-            //    bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
+            //    auto val = csc_val_origin_data[i];
+            //    bin_id_origin_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
             //}, n_block);
-            //for original order csc
-            device_loop_2d(n_column, columns.csc_col_ptr_origin.device_data(), [=]__device__(int cid, int i) {
-                auto search_begin = cut_points_ptr + cut_row_ptr[cid];
-                auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
-                auto val = csc_val_origin_data[i];
-                bin_id_origin_data[i] = lowerBound(search_begin, search_end, val) - search_begin;
-            }, n_block);
 
             //get csr bin id
             auto csr_col_idx_data = csr_col_idx.device_data();
@@ -242,21 +234,23 @@ void HistTreeBuilder::get_bin_ids() {
         //    //                                csr_col_idx.host_data(), csr_row_ptr.host_data(), csr_bin_id.host_data());
         //}
         //columns.csc_val_origin.clear_device();
-        columns.csc_val_origin.resize(0);
+        //columns.csc_val_origin.resize(0);
         columns.csr_val.resize(0);
+        //csr col idx do not need
+        columns.csr_col_idx.resize(0);
         SyncMem::clear_cache();
-        auto max_num_bin = param.max_num_bin;
-        
-        
-        //here 32 is the max nodes in one level
-        size_t current_dense_size = (long long)n_instances*32;
+        //auto max_num_bin = param.max_num_bin;
+        //
+        //
+        ////here 32 is the max nodes in one level
+        //size_t current_dense_size = (long long)n_instances*32;
 
-        dense_bin_id.resize(current_dense_size);
-        auto dense_bin_id_data = dense_bin_id.device_data();
-        
-        device_loop(current_dense_size, [=]__device__(size_t i) {
-            dense_bin_id_data[i] = max_num_bin;
-        });
+        //dense_bin_id.resize(current_dense_size);
+        //auto dense_bin_id_data = dense_bin_id.device_data();
+        //
+        //device_loop(current_dense_size, [=]__device__(size_t i) {
+        //    dense_bin_id_data[i] = max_num_bin;
+        //});
 
     });
 }
@@ -271,7 +265,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
     SyncArray<SplitPoint> &sp = this->sp[device_id];
     SyncArray<bool> &ignored_set = shards[device_id].ignored_set;
     HistCut &cut = this->cut[device_id];
-    auto &dense_bin_id = this->dense_bin_id[device_id];
+    //auto &dense_bin_id = this->dense_bin_id[device_id];
     auto &last_hist = this->last_hist[device_id];
 
     TIMED_FUNC(timerObj);
@@ -853,7 +847,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     else
         columns.csr2csc_gpu(dataset, v_columns);
     cut = vector<HistCut>(param.n_device);
-    dense_bin_id = MSyncArray<unsigned char>(param.n_device);
+    //dense_bin_id = MSyncArray<unsigned char>(param.n_device);
     last_hist = MSyncArray<GHPair>(param.n_device);
 
     //csr bin id
@@ -861,7 +855,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     csr_row_ptr = MSyncArray<int>(param.n_device);
     csr_col_idx = MSyncArray<int>(param.n_device);
 
-    bin_id_origin = MSyncArray<float_type>(param.n_device);
+    //bin_id_origin = MSyncArray<unsigned char>(param.n_device);
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
         if(dataset.use_cpu)
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
@@ -894,18 +888,18 @@ void HistTreeBuilder::update_ins2node_id() {
         
         auto &columns = shards[device_id].columns;
         HistCut &cut = this->cut[device_id];
-        auto &dense_bin_id = this->dense_bin_id[device_id];
+        
         auto &csr_row_ptr = this->csr_row_ptr[device_id];
-        auto &csr_col_idx = this->csr_col_idx[device_id];
         auto &csr_bin_id  = this->csr_bin_id[device_id];
-
+        
         auto csr_row_ptr_data = csr_row_ptr.device_data();
-        auto csr_col_idx_data = csr_col_idx.device_data();
         auto csr_bin_id_data = csr_bin_id.device_data();
+
+        auto cut_row_ptr = cut.cut_row_ptr.device_data();
 
         using namespace thrust;
         int n_column = columns.n_column;
-        // int nnz = columns.nnz;
+        //int nnz = columns.nnz;
         
         // int n_block = fminf((nnz / n_column - 1) / 256 + 1, 4 * 56);
 
@@ -915,86 +909,79 @@ void HistTreeBuilder::update_ins2node_id() {
         has_splittable.host_data()[0] = false;
         bool *h_s_data = has_splittable.device_data();
         int column_offset = columns.column_offset;
-        auto max_num_bin = param.max_num_bin;
+        //auto max_num_bin = param.max_num_bin;
 
-        //int loop_num = 20;//1000;
-        //size_t row_part_size = n_instances/loop_num;
-        long long total_size = (long long)20*(long long)1024*(long long)1024*(long long)1024;//10GB
+        //两种思路
+        //1.得到划分的split bin_id，然后从csr_bin_id中寻找，这样寻找的范围是一个instance中nnz的长度
+        //2、得到划分的split feature 和split feature，在csr中寻找instance的feature和对应的value，这需要保留value数组
+        //选择第一种
+        auto binary_search = [=]__device__( size_t search_begin,  size_t search_end, 
+                                            const size_t cut_begin, const size_t cut_end,
+                                            const int *csr_bin_id_data) {
+            int previous_middle = -1;
+            while (search_begin != search_end) {
+                int middle = search_begin + (search_end - search_begin)/2;
 
-        size_t row_part_size = total_size/n_column;
-        int loop_num = n_instances/row_part_size+1;
-        //size_t current_dense_size = (row_part_size)*(long long)n_column;
-        
-        //initialize dense bin id
-        size_t current_row_size = row_part_size;
-        
-        auto dense_bin_id_data = dense_bin_id.device_data();
-
-        
-        for(int l=0;l<loop_num;l++){
-
-            
-            //last one 
-            if(l==loop_num-1){
-                current_row_size = (n_instances-(loop_num-1)*row_part_size);
-            }
-            int start_row = l * row_part_size;
-            
-
-            //generate dense bin id 
-            //this row is a map value not the real row index
-            device_loop_part_dense_bin_id(current_row_size, csr_row_ptr_data, start_row,[=]__device__(int row, int i) {
-                
-                int fid = csr_col_idx_data[i];
-                auto bid = (unsigned char)csr_bin_id_data[i];
-                size_t pos = (long long)row * (long long)n_column + (long long)fid;
-                dense_bin_id_data[pos] = bid;
-
-            });
-            
-            //update ins2node information
-            //set new node id for each instance
-            device_loop_part_update_node(current_row_size, start_row, [=]__device__(size_t idx, size_t start_row) {
-
-                int iid  = idx+start_row;
-                int nid = nid_data[iid];
-                const Tree::TreeNode &node = nodes_data[nid];
-                int split_fid = node.split_feature_id;
-                if (node.splittable() && ((split_fid - column_offset < n_column) && (split_fid >= column_offset))) {
-                    h_s_data[0] = true;
-                    unsigned char split_bid = node.split_bid;
-                    size_t pos = idx * n_column + split_fid - column_offset;
-                    unsigned char bid = dense_bin_id_data[pos];
-                    bool to_left = true;
-                    if ((bid == max_num_bin && node.default_right) || (bid <= split_bid))
-                        to_left = false;
-                    if (to_left) {
-                        //goes to left child
-                        nid_data[iid] = node.lch_index;
-                    } else {
-                        //right child
-                        nid_data[iid] = node.rch_index;
-                    }
+                if(middle == previous_middle){
+                    break;
                 }
-            });
-            
-            //recover max_bin_id
-            device_loop_part_dense_bin_id(current_row_size, csr_row_ptr_data, start_row,[=]__device__(int row, int i) {
-                
-                int fid = csr_col_idx_data[i];
-                size_t pos = (long long)row * (long long)n_column + (long long)fid;
-                dense_bin_id_data[pos] = max_num_bin;
+                previous_middle = middle;
+                auto tmp_bin_id = csr_bin_id_data[middle];
 
-            });
+                if(tmp_bin_id >= cut_begin && tmp_bin_id < cut_end){
+                    return tmp_bin_id;
+                }
+                else if (tmp_bin_id < cut_begin){
+                    search_begin = middle;
+                }
+                else{
+                    search_end = middle;
+                }
+            }
+            //missing values
+            return -1;
+        };
 
-
-        }
-
+        auto loop_search = [=]__device__( size_t search_begin,  size_t search_end, 
+                                            const size_t cut_begin, const size_t cut_end,
+                                            const int *csr_bin_id_data) {
+            for(int i =search_begin;i<=search_end;i++){
+                auto bin_id = csr_bin_id_data[i];
+                if(bin_id >= cut_begin && bin_id <cut_end){
+                    return bin_id;
+                }
+            }
+            return -1;
+        };
+        //update instance to node map
+        device_loop(n_instances, [=]__device__(int iid) {
+            int nid = nid_data[iid];
+            const Tree::TreeNode &node = nodes_data[nid];
+            int split_fid = node.split_feature_id;
+            if (node.splittable() && ((split_fid - column_offset < n_column) && (split_fid >= column_offset))) {
+                h_s_data[0] = true;
+                int split_bid = (int)node.split_bid+cut_row_ptr[split_fid]; 
+                int bid = binary_search(csr_row_ptr_data[iid],csr_row_ptr_data[iid+1],
+                                        cut_row_ptr[split_fid],cut_row_ptr[split_fid+1],
+                                        csr_bin_id_data);
+                bool to_left = true;
+                if ((bid == -1 && node.default_right) || (bid <= split_bid && bid>=0))
+                    to_left = false;
+                if (to_left) {
+                    //goes to left child
+                    nid_data[iid] = node.lch_index;
+                } else {
+                    //right child
+                    nid_data[iid] = node.rch_index;
+                }
+            }
+        });
+        
+       
         LOG(DEBUG) << "new tree_id = " << ins2node_id[device_id];
         has_split[device_id] = has_splittable.host_data()[0];
     });
 }
-
 //new update func with level
 void HistTreeBuilder::update_ins2node_id(int level) {
     TIMED_FUNC(timerObj);
@@ -1110,7 +1097,6 @@ void HistTreeBuilder::update_ins2node_id(int level) {
                 }
             }
         });
-
         device_loop_part_dense_bin_id_csc(using_col_num,columns.csc_col_ptr_origin.device_data(),col_idx2feature_map_device,[=]__device__(int col_idx,int i){
 
             int ins_idx = csc_row_idx_data[i];

@@ -18,7 +18,7 @@ typedef std::chrono::high_resolution_clock Clock;
 #define TEND(x_) x_##_t1 = Clock::now();
 #define TPRINT(x_, str) printf("%-20s \t%.6f\t sec\n", str, std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()/1e6);
 #define TINT(x_) std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()
-
+//#define CSC
 // FIXME remove this function
 void correct_start(int *csc_col_ptr_2d_data, int first_col_start,
                    int n_column_sub) {
@@ -48,16 +48,17 @@ void SparseColumns::csr2csc_gpu(
     columns.csr_col_idx.copy_from(dataset.csr_col_idx.data(), columns.csr_col_idx.size());
     columns.csr_row_ptr.copy_from(dataset.csr_row_ptr.data(), columns.csr_row_ptr.size());
     
+    n_column = dataset.n_features_;
+    n_row = dataset.n_instances();
+    nnz = dataset.csr_val.size();
+
+#ifdef CSC    
     cusparseHandle_t handle;
     cusparseMatDescr_t descr;
     cusparseCreate(&handle);
     cusparseCreateMatDescr(&descr);
     cusparseSetMatIndexBase(descr, CUSPARSE_INDEX_BASE_ZERO);
     cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL);
-
-    n_column = dataset.n_features_;
-    n_row = dataset.n_instances();
-    nnz = dataset.csr_val.size();
 
     columns.csc_val_origin.resize(nnz);
     columns.csc_row_idx_origin.resize(nnz);
@@ -103,7 +104,7 @@ void SparseColumns::csr2csc_gpu(
     int gpu_num;
     cudaError_t err = cudaGetDeviceCount(&gpu_num);
     std::atexit([]() { SyncMem::clear_cache(); });
-
+#endif
     int n_device = v_columns.size();
     //int ave_n_columns = n_column / n_device;
     DO_ON_MULTI_DEVICES(n_device, [&](int device_id) {

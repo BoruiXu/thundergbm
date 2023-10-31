@@ -178,7 +178,8 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
                 update_tree();
 
                 TSTART(find_sp)
-                update_ins2node_id(level);
+                //update_ins2node_id(level);
+                update_ins2node_id();
                 TEND(find_sp)
                 total_sp_time+=TINT(find_sp);
                 {
