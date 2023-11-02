@@ -36,7 +36,7 @@ void check_hist_res(GHPair* hist, GHPair* hist_test, int n_bins){
     
     for(int i = 0;i<n_bins;++i){
         
-        total_diff_g = abs(hist_test[i].g-hist[i].g);
+        total_diff_g += abs(hist_test[i].g-hist[i].g);
     
     }
     avg_diff_g = total_diff_g/n_bins;
@@ -199,6 +199,9 @@ void HistTreeBuilder::get_bin_ids() {
                 auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
                 auto val = csr_val_data[i];
                 csr_bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
+                
+                //csr_col_idx store the instance id
+                //csr_col_idx_data[i] = instance_id;
             }, n_block);
 
         }
@@ -326,7 +329,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         
                             //int fid = csr_col_idx_data[j];
                             int bid = (int)csr_bin_id_data[j];
-                            
                             //int feature_offset = cut_row_ptr_data[fid];
                             const GHPair src = gh_data[i];
                             //GHPair &dest = hist_data[feature_offset + bid]; 
@@ -337,6 +339,34 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 atomicAdd(&dest.g, src.g);                            
                         
                         },n_block);
+                        
+
+                        //device_loop(n_instances,[=]__device__(int i){
+                        //    auto st = csr_row_ptr_data[i];
+                        //    auto ed = csr_row_ptr_data[i+1];
+                        //    const GHPair src = gh_data[i];
+                        //    for(int j = st;j<ed;j++){
+                        //        int bid = (int)csr_bin_id_data[j];
+                        //        GHPair &dest = hist_data[bid];
+                        //        if(src.h != 0)
+                        //            atomicAdd(&dest.h, src.h);
+                        //        if(src.g != 0)
+                        //            atomicAdd(&dest.g, src.g);
+                        //    }
+                        //
+                        //});
+                        //device_loop(csr_bin_id.size(),[=]__device__(int i){
+                        //    int bid = csr_bin_id_data[i];
+                        //    int iid = csr_col_idx_data[i];
+                        //    const GHPair src = gh_data[iid];
+                        //    GHPair &dest = hist_data[bid];
+                        //    if(src.h != 0)
+                        //        atomicAdd(&dest.h, src.h);
+                        //    if(src.g != 0)
+                        //        atomicAdd(&dest.g, src.g);
+                        //});
+
+
 
                         //new code 
                         last_hist.copy_from(hist.device_data(),n_bins);
@@ -555,7 +585,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                         int iid = node_idx_data[i+idx_begin];
                                         int begin = csr_row_ptr_data[iid];
                                         int end = csr_row_ptr_data[iid+1];
-
                                         for(int j = begin+current_pos;j<end;j+=stride){
                                             //int fid = csr_col_idx_data[j];
                                             int bid = (int)csr_bin_id_data[j];
@@ -564,17 +593,32 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                             const GHPair src = gh_data[iid];
                                             //GHPair &dest = hist_data[feature_offset + bid];
                                             GHPair &dest = hist_data[bid];
-
                                             if(src.h!= 0){
                                                 atomicAdd(&dest.h, src.h);
                                             }
-
                                             if(src.g!= 0){
                                                 atomicAdd(&dest.g, src.g);
                                             }
-                                        
                                         }
                                     },n_block);
+
+                                    //device_loop((idx_end - idx_begin),[=]__device__(int i ){
+                                    //    int iid = node_idx_data[i+idx_begin];
+                                    //    int begin = csr_row_ptr_data[iid];
+                                    //    int end = csr_row_ptr_data[iid+1];
+                                    //    const GHPair src = gh_data[iid];
+                                    //    for(int j = begin;j<end;j++){
+                                    //        int bid = csr_bin_id_data[j];
+                                    //        GHPair &dest = hist_data[bid];
+                                    //        if(src.h!= 0){
+                                    //            atomicAdd(&dest.h, src.h);
+                                    //        }
+                                    //        if(src.g!= 0){
+                                    //            atomicAdd(&dest.g, src.g);
+                                    //        }
+                                    //    }
+                                    //    
+                                    //});
 
                                     //check result
                                     // check_hist_res(hist.host_data() + nid0 * n_bins,test.host_data()+computed_hist_pos*n_bins,n_bins);
