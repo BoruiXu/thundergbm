@@ -281,7 +281,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
     size_t n_max_splits = n_max_nodes * (long long)n_bins;
     size_t n_split = n_nodes_in_level * (long long)n_bins;
 
-    int n_block = fminf((columns.nnz / this->n_instances - 1) / 256 + 1, 4 * 84); 
+    int n_block = fminf((columns.nnz / this->n_instances - 1) / 256 + 1, 4 * 84);
+    int avg_f = (columns.nnz / this->n_instances );
     //csr bin id
     auto &csr_row_ptr = this->csr_row_ptr[device_id];
     auto &csr_col_idx = this->csr_col_idx[device_id];
@@ -340,7 +341,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         
                         },n_block);
                         
-
                         //device_loop(n_instances,[=]__device__(int i){
                         //    auto st = csr_row_ptr_data[i];
                         //    auto ed = csr_row_ptr_data[i+1];
@@ -374,7 +374,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                         inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + n_bins,
                                       hist.device_data(), hist.device_data());
-
                         { //missing 
                             auto nodes_data = tree.nodes.device_data();
                             auto missing_gh_data = missing_gh.device_data();
@@ -539,12 +538,10 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         SyncArray<float_type> gain(len_hist);
                         SyncArray<int_float> best_idx_gain(n_nodes_in_level);
                         sp.resize(n_nodes_in_level);
-
                         //test
                         // SyncArray<GHPair> test(2*n_bins);
                         // auto test_data = test.device_data();
                         for (int i = 0; i < n_nodes_in_level / 2; ++i) {
-
                             size_t tmp_index = i;
                             int nid0_to_compute = i * 2;
                             int nid0_to_substract = i * 2 + 1;
@@ -630,13 +627,13 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             {
                                 auto hist_data_computed = hist.device_data() + computed_hist_pos * n_bins;
                                 auto hist_data_to_compute = hist.device_data() + to_compute_hist_pos * n_bins;
-                                auto father_hist_data = last_hist.device_data() + (nid0_to_substract / 2) * n_bins;
+                                auto father_hist_data = last_hist.device_data() + (size_t)(nid0_to_substract / 2) * n_bins;
                                 
                                 if(level%2==0){
                                     size_t st_pos = (((half_last_hist_len+(nid0_to_substract / 2)))%last_hist_len)* n_bins;
                                     father_hist_data = last_hist.device_data() + st_pos ;
                                 }
-
+                                
                                 device_loop(n_bins, [=]__device__(int i) {
                                     hist_data_to_compute[i] = father_hist_data[i] - hist_data_computed[i];
                                 });
@@ -652,7 +649,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 if(level%2==0){
                                     //even level
                                     // LOG(INFO)<<"start_pos in even level "<<2*i;
-                                    cudaMemcpy(last_hist.device_data()+2*i*n_bins, hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                    cudaMemcpy(last_hist.device_data()+(size_t)2*i*n_bins, hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
                                 }
                                 else{
                                     //odd level
@@ -665,7 +662,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
 
                             cudaDeviceSynchronize();
-
                             inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + 2*n_bins,
                                         hist.device_data(), 
                                         hist.device_data());
@@ -737,7 +733,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 });
                                 LOG(DEBUG) << "gain = " << gain;
                             }
-
                             
                             {
                     //            TIMED_SCOPE(timerObj, "get best gain");
@@ -753,7 +748,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 reduce_by_key(
                                         cuda::par,
                                         nid_iterator, nid_iterator + 2*n_bins,
-                                        make_zip_iterator(make_tuple(counting_iterator<int>(2*tmp_index*n_bins), gain.device_data())),
+                                        make_zip_iterator(make_tuple(counting_iterator<int>(0), gain.device_data())),
                                         make_discard_iterator(),
                                         best_idx_gain.device_data(),
                                         thrust::equal_to<int>(),
@@ -782,7 +777,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 device_loop(2, [=]__device__(int i) {
                                     int_float bst = best_idx_gain_data[i];
                                     float_type best_split_gain = get<1>(bst);
-                                    int split_index = get<0>(bst);
+                                    size_t split_index = get<0>(bst);
                                     if (!nodes_data[i + nid_offset+2*tmp_index].is_valid) {
                                         sp_data[i+2*tmp_index].split_fea_id = -1;
                                         sp_data[i+2*tmp_index].nid = -1;
@@ -907,7 +902,6 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
         LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
-        
         //set data
         auto y_predict_data = y_predict[device_id].device_data();
         device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
