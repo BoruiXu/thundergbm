@@ -172,7 +172,7 @@ struct Op {
   }
 };
 //new func
-void unique_by_flag2 (SyncArray<float> &target_arr, SyncArray<int> &flags, int n_columns){
+void unique_by_flag2 (SyncArray<float_type> &target_arr, SyncArray<int> &flags, int n_columns){
 
     auto traget_arr_data = target_arr.device_data();
     auto flags_data = flags.device_data();

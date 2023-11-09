@@ -906,6 +906,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
         auto y_predict_data = y_predict[device_id].device_data();
         device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
             y_predict_data[i] = -0.975106f;
+            //y_predict_data[i] = 0.5f;
         });
    });
     get_bin_ids();
