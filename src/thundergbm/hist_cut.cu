@@ -255,7 +255,58 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
         atomicAdd(cut_row_ptr_data + cut_fid_data[fid] + 1, 1);
     });
     thrust::inclusive_scan(thrust::device, cut_row_ptr_data, cut_row_ptr_data + cut_row_ptr.size(), cut_row_ptr_data);
-    SyncMem::clear_cache(); 
+    SyncMem::clear_cache();
+
+    //test xgboost cut
+    auto ptr_host = cut_row_ptr.host_data();
+    std::vector<int> tmp1;
+    std::ifstream infile1("/home/xbr/hpc_code/xgboost/test_bench/ptr.txt");
+    int val1;
+    while(infile1 >> val1){
+        tmp1.push_back(val1);
+    }
+    infile1.close();
+    //cut_row_ptr.resize(tmp1.size());
+    //cut_row_ptr.copy_from(tmp1.data(),tmp1.size());
+    for(int i =0;i<cut_row_ptr.size();i++){
+        ptr_host[i] = tmp1[i+1]-1;
+    }
+
+    std::vector<float> tmp2;
+    std::ifstream infile2("/home/xbr/hpc_code/xgboost/test_bench/val.txt");
+    float val2;
+    while(infile2 >> val2){
+        tmp2.push_back(val2);
+    }
+    infile2.close();
+    cut_points_val.resize(tmp2.size()-1);
+    //cut_points_val.copy_from(tmp2.data(),tmp2.size());
+    auto val_host = cut_points_val.host_data();
+    
+    for(int i = 0;i<cut_row_ptr.size()-1;i++){
+        int s = ptr_host[i];
+        int e = ptr_host[i+1];
+
+        int s2 = tmp1[i+1];
+        int e2 = tmp1[i+2];
+
+        for(int j = s;j<e;j--){
+            val_host[j] = tmp2[s2];
+            s2++;
+        }
+    }
+    cut_fid.resize(cut_points_val.size());
+    auto fid_host = cut_fid.host_data();
+    //auto ptr_host = cut_row_ptr.host_data();
+
+    for(int i = 0;i<cut_row_ptr.size()-1;i++){
+        int s = ptr_host[i];
+        int e = ptr_host[i+1];
+        for(int j = s;j<e;j++){
+            fid_host[j] = i;
+        }
+    } 
+
     LOG(DEBUG) << "--->>>>  cut points value: " << cut_points_val;
     LOG(DEBUG) << "--->>>> cut row ptr: " << cut_row_ptr;
     LOG(DEBUG) << "--->>>> cut fid: " << cut_fid;
