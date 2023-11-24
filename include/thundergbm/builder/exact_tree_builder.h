@@ -21,8 +21,6 @@ public:
 
     void update_ins2node_id() override;
     
-    //new func
-    void update_ins2node_id(int level) override;
 
     virtual ~ExactTreeBuilder(){};
 

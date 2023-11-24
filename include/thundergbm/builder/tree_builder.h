@@ -17,8 +17,6 @@ public:
 
     virtual void update_ins2node_id() = 0;
 
-    //new func
-    virtual void update_ins2node_id(int level) = 0;
 
     vector<Tree> build_approximate(const MSyncArray<GHPair> &gradients) override;
 

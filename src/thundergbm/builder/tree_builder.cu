@@ -45,12 +45,16 @@ void TreeBuilder::update_tree() {
                 //todo process begin
                 node.split_value = sp_data[i].fval;
                 node.split_bid = sp_data[i].split_bid;
-                rch.sum_gh_pair = sp_data[i].rch_sum_gh;
-                if (sp_data[i].default_right) {
-                    rch.sum_gh_pair = rch.sum_gh_pair + p_missing_gh;
+
+                lch.sum_gh_pair = sp_data[i].lch_sum_gh;
+                if (!sp_data[i].default_right) {
+                    lch.sum_gh_pair = lch.sum_gh_pair + p_missing_gh;
+                    node.default_right = false;
+                }
+                else{
                     node.default_right = true;
                 }
-                lch.sum_gh_pair = node.sum_gh_pair - rch.sum_gh_pair;
+                rch.sum_gh_pair = node.sum_gh_pair - lch.sum_gh_pair;
                 lch.calc_weight(lambda);
                 rch.calc_weight(lambda);
             } else {
@@ -178,7 +182,6 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
                 update_tree();
 
                 TSTART(find_sp)
-                //update_ins2node_id(level);
                 update_ins2node_id();
                 TEND(find_sp)
                 total_sp_time+=TINT(find_sp);

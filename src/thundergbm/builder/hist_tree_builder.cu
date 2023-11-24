@@ -45,96 +45,7 @@ void check_hist_res(GHPair* hist, GHPair* hist_test, int n_bins){
 
 }
 
-void csc2csr(SyncArray<int> &csc_col_ptr,SyncArray<int> &csc_row_idx,SyncArray<float_type> &csc_val,
-            SyncArray<int> &row_ptr,SyncArray<int> &col_idx,SyncArray<float_type> &val, 
-            int n_instance, int n_feature){
-    
-    LOG(INFO)<<"run csc to csr...";
-    //SyncArray<unsigned char> val;
-    //SyncArray<int> val1;
-    //SyncArray<int> val2;
-    int nnz = csc_row_idx.size();
 
-    //val1.resize(nnz);
-    //val2.resize(nnz);
-    val.resize(nnz);
-    col_idx.resize(nnz);
-    row_ptr.resize(n_instance+1);
-
-    //using cusparse convert csc to csr
-
-    cusparseHandle_t handle;
-    cusparseMatDescr_t descr;
-    cusparseCreate(&handle);
-    cusparseCreateMatDescr(&descr);
-    cusparseSetMatIndexBase(descr, CUSPARSE_INDEX_BASE_ZERO);
-    cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL);
-    //char
-    cudaDataType data_type = CUDA_R_32F;//other datatype cause wrong?
-    cusparseStatus_t status;
-
-    size_t buffer_size = 1;
-    status = cusparseCsr2cscEx2_bufferSize(handle, n_feature, n_instance, nnz, 
-                                    csc_val.device_data(),csc_col_ptr.device_data(),csc_row_idx.device_data(),
-                                    val.device_data(),row_ptr.device_data(),col_idx.device_data(),
-                                    data_type, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, &buffer_size);
-    SyncArray<char> tmp_buffer(buffer_size);
-    LOG(INFO)<<"buffer size is "<<buffer_size/1e9<<" G";
-    cusparseCsr2cscEx2(handle, n_feature, n_instance, nnz, 
-                            csc_val.device_data(),csc_col_ptr.device_data(),csc_row_idx.device_data(),
-                            val.device_data(),row_ptr.device_data(),col_idx.device_data(),
-                            data_type, CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, tmp_buffer.device_data());
-
-    cudaDeviceSynchronize();
-    LOG(INFO)<<"return status is "<<status;
-    cusparseDestroy(handle);
-    cusparseDestroyMatDescr(descr);
-    tmp_buffer.resize(0);
-    SyncMem::clear_cache();
-    //csc_val.resize(0);
-    //csc_col_ptr.resize(0);
-    //csc_row_idx.resize(0);
-
-
-}
-
-//csc to csr on cpu
-void csc2csr_cpu(int *host_csc_col_ptr,int *host_csc_row_idx,float_type *host_csc_val,
-            int *host_row_ptr,int *host_col_idx,float_type *host_val, 
-            int n_instance, int n_feature,size_t nnz){
-    LOG(INFO)<<"run csc to csr in cpu...";
-    
-    //initialize row_ptr
-    //memset 0
-    memset(host_row_ptr,0,sizeof(int)*(n_instance+1));
-    int *tmp_loc = new int[nnz];
-    #pragma omp parallel for
-    for(int i=0;i<nnz;i++){
-        int idx = host_csc_row_idx[i]+1;
-        //tmp_loc[i] = host_row_ptr[idx];
-        
-        #pragma omp atomic capture
-        tmp_loc[i] = host_row_ptr[idx]++;
-    }
-
-    for(int i=1;i<n_instance+1;i++){
-        host_row_ptr[i] += host_row_ptr[i-1];
-    }
-
-    //parallel construct csr_col and csr_val
-
-    #pragma omp parallel for
-    for(int i=0;i<n_feature;i++){
-        int start = host_csc_col_ptr[i];
-        int end = host_csc_col_ptr[i+1];
-        for(int j=start;j<end;j++){
-            int idx = host_csc_row_idx[j];
-            int pos = host_row_ptr[idx]+tmp_loc[j];
-            host_col_idx[pos] = i;
-            host_val[pos] = host_csc_val[j];
-        }
-    }
-}
 
 void HistTreeBuilder::get_bin_ids() {
     DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
@@ -167,16 +78,16 @@ void HistTreeBuilder::get_bin_ids() {
         csr_row_ptr.set_device_data(columns.csr_row_ptr.device_data());
         csr_col_idx.set_device_data(columns.csr_col_idx.device_data());
 
-        {
-            auto lowerBound = [=]__device__(const float_type *search_begin, const float_type *search_end, float_type val) {
+        {   //in thrust lowerbound <= first element, upperbound is < first element 
+            auto upperBound = [=]__device__(const float_type *search_begin, const float_type *search_end, float_type val) {
                 const float_type *left = search_begin;
                 const float_type *right = search_end - 1;
 
                 while (left != right) {
                     const float_type *mid = left + (right - left) / 2;
                     if (*mid <= val)
-                        right = mid;
-                    else left = mid + 1;
+                        left = mid+1;
+                    else right = mid;
                 }
                 return left;
             };
@@ -198,7 +109,7 @@ void HistTreeBuilder::get_bin_ids() {
                 auto search_begin = cut_points_ptr + cut_row_ptr[cid];
                 auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
                 auto val = csr_val_data[i];
-                csr_bin_id_data[i] = lowerBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
+                csr_bin_id_data[i] = upperBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
                 
                 //csr_col_idx store the instance id
                 //csr_col_idx_data[i] = instance_id;
@@ -421,12 +332,12 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     int pid = nid0 * n_column + hist_fid[i];
                                     GHPair father_gh = nodes_data[nid].sum_gh_pair;
                                     GHPair p_missing_gh = missing_gh_data[pid];
-                                    GHPair rch_gh = gh_prefix_sum_data[i];
-                                    float_type default_to_left_gain = max(0.f,
-                                                                          compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
-                                    rch_gh = rch_gh + p_missing_gh;
+                                    GHPair lch_gh = gh_prefix_sum_data[i];
                                     float_type default_to_right_gain = max(0.f,
-                                                                           compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
+                                                                          compute_gain(father_gh, lch_gh, father_gh - lch_gh, mcw, l));
+                                    lch_gh = lch_gh + p_missing_gh;
+                                    float_type default_to_left_gain = max(0.f,
+                                                                           compute_gain(father_gh, lch_gh, father_gh - lch_gh, mcw, l));
                                     if (default_to_left_gain > default_to_right_gain)
                                         gain_data[i] = default_to_left_gain;
                                     else
@@ -493,7 +404,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 sp_data[i].split_bid = (unsigned char) (split_index % n_bins - cut_row_ptr_data[fid]);
                                 sp_data[i].fea_missing_gh = missing_gh_data[i * n_column + hist_fid[split_index]];
                                 sp_data[i].default_right = best_split_gain < 0;
-                                sp_data[i].rch_sum_gh = hist_data[split_index];
+                                sp_data[i].lch_sum_gh = hist_data[split_index];
                             });
                         }
                         
@@ -718,12 +629,12 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                         int pid = nid0 * n_column + hist_fid[i];
                                         GHPair father_gh = nodes_data[nid].sum_gh_pair;
                                         GHPair p_missing_gh = missing_gh_data[pid];
-                                        GHPair rch_gh = gh_prefix_sum_data[i];
-                                        float_type default_to_left_gain = max(0.f,
-                                                                              compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
-                                        rch_gh = rch_gh + p_missing_gh;
+                                        GHPair lch_gh = gh_prefix_sum_data[i];
                                         float_type default_to_right_gain = max(0.f,
-                                                                               compute_gain(father_gh, father_gh - rch_gh, rch_gh, mcw, l));
+                                                                              compute_gain(father_gh, lch_gh, father_gh - lch_gh, mcw, l));
+                                        lch_gh = lch_gh + p_missing_gh;
+                                        float_type default_to_left_gain = max(0.f,
+                                                                               compute_gain(father_gh, lch_gh, father_gh - lch_gh, mcw, l));
                                         if (default_to_left_gain > default_to_right_gain)
                                             gain_data[i] = default_to_left_gain;
                                         else
@@ -791,7 +702,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     sp_data[i+2*tmp_index].split_bid = (unsigned char) (split_index % n_bins - cut_row_ptr_data[fid]);
                                     sp_data[i+2*tmp_index].fea_missing_gh = missing_gh_data[(i) * n_column + hist_fid[split_index]];
                                     sp_data[i+2*tmp_index].default_right = best_split_gain < 0;
-                                    sp_data[i+2*tmp_index].rch_sum_gh = hist_data[i*n_bins+split_index%n_bins];
+                                    sp_data[i+2*tmp_index].lch_sum_gh = hist_data[i*n_bins+split_index%n_bins];
 
                                 });
                                 
@@ -1019,134 +930,6 @@ void HistTreeBuilder::update_ins2node_id() {
         });
         
        
-        LOG(DEBUG) << "new tree_id = " << ins2node_id[device_id];
-        has_split[device_id] = has_splittable.host_data()[0];
-    });
-}
-//new update func with level
-void HistTreeBuilder::update_ins2node_id(int level) {
-    TIMED_FUNC(timerObj);
-    DO_ON_MULTI_DEVICES(param.n_device, [&](int device_id){
-        
-        int n_nodes_in_level = static_cast<int>(pow(2, level));
-        //当前level节点的开始index
-        int nid_offset = static_cast<int>(pow(2, level) - 1);
-        
-        auto &columns = shards[device_id].columns;
-        HistCut &cut = this->cut[device_id];
-        auto &dense_bin_id = this->dense_bin_id[device_id];
-        auto &csr_row_ptr = this->csr_row_ptr[device_id];
-        auto &csr_col_idx = this->csr_col_idx[device_id];
-        auto &csr_bin_id  = this->csr_bin_id[device_id];
-
-        auto csr_row_ptr_data = csr_row_ptr.device_data();
-        auto csr_col_idx_data = csr_col_idx.device_data();
-        auto csr_bin_id_data = csr_bin_id.device_data();
-
-        using namespace thrust;
-        int n_column = columns.n_column;
-        // int nnz = columns.nnz;
-        
-        // int n_block = fminf((nnz / n_column - 1) / 256 + 1, 4 * 56);
-       
-
-        int using_col_num = 0;
-        //first loop for splitable
-        //for(int i =0;i<n_nodes_in_level;++i){
-        //    const Tree::TreeNode &node = trees[device_id].nodes.host_data()[i+nid_offset];
-
-        //    //mat same fid ??
-        //    if(node.splittable()){
-        //        using_col_num++;
-        //    }
-        //}
-        //
-        //if(using_col_num==0){
-        //   has_split[device_id] = false;
-        //   return;
-        //}
-
-        SyncArray<int> col_idx2feature_map(32);
-        SyncArray<int> feature2col_idx_map(n_column);
-        auto col_idx2feature_map_host = col_idx2feature_map.host_data();
-        auto feature2col_idx_map_host = feature2col_idx_map.host_data();
-        
-        int tmp = 0;
-        for(int i=0;i<n_nodes_in_level;++i){
-            
-            //current split node
-            const Tree::TreeNode &node = trees[device_id].nodes.host_data()[i+nid_offset];
-            if(node.splittable()){ 
-                int split_fid = node.split_feature_id;
-                col_idx2feature_map_host[tmp] = split_fid;
-                feature2col_idx_map_host[split_fid] = tmp;
-                tmp++;
-            }
-        }
-        using_col_num = tmp;
-        if(using_col_num==0){
-           has_split[device_id] = false;
-           return;
-        }
-        SyncArray<bool> has_splittable(1);
-        auto nid_data = ins2node_id[device_id].device_data();
-        const Tree::TreeNode *nodes_data = trees[device_id].nodes.device_data();
-        has_splittable.host_data()[0] = false;
-        bool *h_s_data = has_splittable.device_data();
-        int column_offset = columns.column_offset;
-        auto max_num_bin = param.max_num_bin;
-        auto dense_bin_id_data = dense_bin_id.device_data();
-        
-
-        auto col_idx2feature_map_device = col_idx2feature_map.device_data();
-        auto feature2col_idx_map_device = feature2col_idx_map.device_data();
-        auto &bin_id_origin = this->bin_id_origin[device_id];
-        auto bin_id_origin_data = bin_id_origin.device_data();
-        auto csc_row_idx_data = columns.csc_row_idx_origin.device_data();
-        //size_t num_block = (n_instances/n_column)/256+1;
-        size_t num_block = (n_instances)/256+1;
-        //update process
-        device_loop_part_dense_bin_id_csc(using_col_num,columns.csc_col_ptr_origin.device_data(),col_idx2feature_map_device,[=]__device__(int col_idx,int i){
-
-            int ins_idx = csc_row_idx_data[i];
-            auto bid = (unsigned char)bin_id_origin_data[i];
-            size_t pos = (unsigned int)ins_idx*using_col_num+col_idx;
-
-            dense_bin_id_data[pos] = bid;
-        },num_block);
-
-        device_loop_part_update_node(n_instances, 0, [=]__device__(size_t idx, size_t tt ) {
- 
-            int iid  = idx;
-            int nid = nid_data[iid];
-            const Tree::TreeNode &node = nodes_data[nid];
-            int split_fid = node.split_feature_id;
-            if (node.splittable() && ((split_fid - column_offset < n_column) && (split_fid >= column_offset))) {
-                h_s_data[0] = true;
-                unsigned char split_bid = node.split_bid;
-                size_t pos = (unsigned int)iid* using_col_num + feature2col_idx_map_device[split_fid];
-                unsigned char bid = dense_bin_id_data[pos];
-                bool to_left = true;
-                if ((bid == max_num_bin && node.default_right) || (bid <= split_bid))
-                    to_left = false;
-                if (to_left) {
-                    //goes to left child
-                    nid_data[iid] = node.lch_index;
-                } else {
-                    //right child
-                    nid_data[iid] = node.rch_index;
-                }
-            }
-        });
-        device_loop_part_dense_bin_id_csc(using_col_num,columns.csc_col_ptr_origin.device_data(),col_idx2feature_map_device,[=]__device__(int col_idx,int i){
-
-            int ins_idx = csc_row_idx_data[i];
-            size_t pos = (unsigned int)ins_idx*using_col_num+col_idx;
-
-            dense_bin_id_data[pos] = max_num_bin;
-
-        },num_block);
-
         LOG(DEBUG) << "new tree_id = " << ins2node_id[device_id];
         has_split[device_id] = has_splittable.host_data()[0];
     });

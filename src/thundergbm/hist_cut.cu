@@ -166,7 +166,7 @@ typedef thrust::tuple<float, int> float_int;
 struct Op {
   __device__ bool operator()(const float_int &a, const float_int &b) {
     if (thrust::get<1>(a) == thrust::get<1>(b)) {
-        return thrust::get<0>(a) > thrust::get<0>(b);
+        return thrust::get<0>(a) < thrust::get<0>(b);
     }
     return thrust::get<1>(a) < thrust::get<1>(b);
   }
