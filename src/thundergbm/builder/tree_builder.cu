@@ -63,6 +63,24 @@ void TreeBuilder::update_tree() {
                 nodes_data[node.rch_index].is_valid = false;
             }
         });
+        //get node information
+        auto tmp = tree.nodes.host_data();
+        auto tmp_sp = sp.host_data();
+        //LOG(INFO)<<"n_nodes_in_level "<<n_nodes_in_level; 
+        //LOG(INFO)<<"****************";
+        //for(int i =0;i<n_nodes_in_level;i++){
+        //    auto nn = tmp[tmp_sp[i].nid];
+        //    LOG(INFO)<<"node "<<tmp_sp[i].nid;
+        //    LOG(INFO)<<"best gain "<<nn.gain;
+        //    LOG(INFO)<<"split feature "<<nn.split_feature_id;
+        //    LOG(INFO)<<"sum gh "<<nn.sum_gh_pair;
+        //    LOG(INFO)<<"base weight "<<nn.base_weight;
+        //    //LOG(INFO)<<"leaf weight "<<tmp[nn.lch_index].base_weight;
+        //    //LOG(INFO)<<"right weight "<<tmp[nn.rch_index].base_weight;
+        //}
+        //LOG(INFO)<<"****************";
+
+
         LOG(DEBUG) << tree.nodes;
     });
 }
@@ -203,6 +221,11 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
         predict_in_training(k);
         tree.nodes.resize(this->trees.front().nodes.size());
         tree.nodes.copy_from(this->trees.front().nodes);
+    }
+    for(int i =0;i<trees[0].nodes.size();i++){
+        LOG(INFO)<<"node "<<i<<" :";
+        LOG(INFO)<<trees[0].nodes.host_data()[i];
+        LOG(INFO)<<"*******************";
     }
     return trees;
 }

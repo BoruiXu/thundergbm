@@ -41,5 +41,6 @@ int main(int argc, char **argv) {
     
     std::filesystem::path pathObj(model_param.path);
     std::string datasetName = pathObj.filename().string();
-    parser.save_model(datasetName+".model", model_param, boosted_model, dataset);
+    //parser.save_model(datasetName+".model", model_param, boosted_model, dataset);
+    parser.save_model("tgbm.model", model_param, boosted_model, dataset);
 }

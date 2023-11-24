@@ -432,6 +432,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     else
                                         gain_data[i] = -default_to_right_gain;//negative means default split to right
 
+
                                 } else gain_data[i] = 0;
                             });
                             LOG(DEBUG) << "gain = " << gain;
@@ -460,6 +461,21 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             );
                             LOG(DEBUG) << n_split;
                             LOG(DEBUG) << "best rank & gain = " << best_idx_gain;
+                            
+                            //int feautre = -1;
+                            //int gain_max = -1;
+                            //auto gain_h = gain.host_data();
+                            //for(int i =0;i<n_bins;i++){
+                            //    if(fabsf(gain_h[i])>gain_max){
+                            //        feautre = cut.cut_fid.host_data()[i];
+                            //        gain_max = fabsf(gain_h[i]);
+                            //    }
+                            //    if(fabsf(gain_h[i])==fabsf(gain_h[5636])){
+                            //        LOG(INFO)<<cut.cut_fid.host_data()[i]<<" "<<i;
+                            //    }
+
+                            //}
+                            //LOG(INFO)<<"feautre "<<feautre<<" gain_max "<<gain_max;
                         }
 
                         //get split points
@@ -494,6 +510,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 sp_data[i].fea_missing_gh = missing_gh_data[i * n_column + hist_fid[split_index]];
                                 sp_data[i].default_right = best_split_gain < 0;
                                 sp_data[i].rch_sum_gh = hist_data[split_index];
+                                //printf("right sum gh %lf\n",(double)hist_data[split_index].g+sp_data[i].fea_missing_gh.g);
+                                //printf("split feature bid is %d\n",(int)(split_index % n_bins - cut_row_ptr_data[fid]));
                             });
                         }
                         
@@ -655,13 +673,23 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     //odd level
                                     //start copy position
                                     size_t start_pos = ((half_last_hist_len+2*i)%last_hist_len)*n_bins;
-                                    // LOG(INFO)<<"start_pos in odd level "<<((half_last_hist_len+2*i)%last_hist_len);
-                                    cudaMemcpy(last_hist.device_data()+start_pos,hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                    if(param.depth!=3){
+                                        //size_t start_pos = ((half_last_hist_len+2*i)%last_hist_len)*n_bins;
+                                        // LOG(INFO)<<"start_pos in odd level "<<((half_last_hist_len+2*i)%last_hist_len);
+                                        cudaMemcpy(last_hist.device_data()+start_pos,hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                    }else{
+                                        cudaMemcpy(last_hist.device_data()+start_pos,hist.device_data(), n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                        
+                                        cudaMemcpy(last_hist.device_data(),hist.device_data()+n_bins, n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                    }
+
                                 }
                             }
 
 
                             cudaDeviceSynchronize();
+    
+
                             inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + 2*n_bins,
                                         hist.device_data(), 
                                         hist.device_data());
@@ -757,6 +785,79 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 LOG(DEBUG) << n_split;
                                 LOG(DEBUG) << "best rank & gain = " << best_idx_gain;
                             }
+                            //test reduce
+                            //get best split for every feature
+                            //auto arg_abs_max2 = []__device__(const int_float &a, const int_float &b) {
+                            //    return fabsf(get<1>(a)) > fabsf(get<1>(b)) ? a : b;
+                            //};
+                            //SyncArray<int_float> tmp_gain((cut.cut_row_ptr.size()-1)*2);
+                            //reduce_by_key(
+                            //        cuda::par,
+                            //        cut.cut_fid.device_data(), cut.cut_fid.device_data() + n_bins,
+                            //        make_zip_iterator(make_tuple(counting_iterator<int>(0), gain.device_data())),
+                            //        make_discard_iterator(),
+                            //        tmp_gain.device_data(),
+                            //        thrust::equal_to<int>(),
+                            //        arg_abs_max2
+                            //);
+                            if(n_nodes_in_level==4&&tmp_index==0){
+                                auto gain_h = gain.host_data();
+                                int feature = -1;
+                                int ttt = -1;
+                                double gain_max = -10000;
+                                auto tmp_hist = hist.host_data();
+                                auto p_gh = tree.nodes.host_data()[3].sum_gh_pair;
+                                auto tmp_missing = missing_gh.host_data();
+                                for(int i =0;i<n_bins;i++){
+                                    //feature = cut.cut_fid.host_data()[i];
+                                    auto r_gh = tmp_hist[i];
+                                    auto l_gh = p_gh - r_gh;
+                                    
+                                    auto gain = (r_gh.g*r_gh.g)/(r_gh.h+1)+(l_gh.g*l_gh.g)/(l_gh.h+1)- (p_gh.g*p_gh.g)/(p_gh.h+1);
+                                    if(r_gh.h<1 || l_gh.h<1){gain =0;}
+                                    if(gain_max<gain){
+                                        feature = cut.cut_fid.host_data()[i];
+                                        gain_max = gain;
+                                        ttt = i;
+                                    }
+                                    if(i==17767){
+                                        LOG(INFO)<<"17767 gain is "<<gain;
+                                    }
+                                    //if(gain_h[i]>gain_max){
+                                    //    gain_max = gain_h[i];
+                                    //    feature = cut.cut_fid.host_data()[i];
+                                    //    ttt = i;
+                                    //}
+                                    //17767
+                                    //if(gain == gain_h[17767]){
+                                    //    LOG(INFO)<<"feature "<<feature<<" index is "<<i;
+                                    //    LOG(INFO)<<"right gradient is "<<r_gh<<" leat gradient is "<<l_gh;
+                                    //}
+                                    if(i == 356729){
+                                        LOG(INFO)<<"==? "<<(gain==gain_h[17767]);
+                                    }
+                                    //if(i == (13985404%n_bins)){
+                                    //    printf("gain is %f, 2630566 gain is %f, ==2630566? %d\n",gain,gain_h[2630566],gain==gain_h[2630566]);
+                                    //}
+
+                                    
+                                }
+                                LOG(INFO)<<"feature "<<feature<<" index "<<ttt<<" gain_max "<<gain_max<<" true gain is "<<gain_h[ttt];
+                                LOG(INFO)<<"feature "<<cut.cut_fid.host_data()[356729]<<" index "<<356729<<" gain is "<<gain_h[356729];
+                                //bool flag = false;
+                                //auto tmp_hist = hist.host_data();
+                                //auto p_gh = tree.nodes.host_data()[4].sum_gh_pair;
+                                //for(int i =0;i<n_bins;i++){
+                                // 
+                                //}
+                                //if(flag)
+                                //LOG(INFO)<<"gain have data";
+                            }
+
+                            //if(n_nodes_in_level==4 && i==0){
+                            //
+                            //    LOG(INFO)<<"feature 78  gain "<<tmp_gain.host_data()[78]<<" feature 2083 gain "<<tmp_gain.host_data()[2083];
+                            //}
 
                             
                             //get split points
@@ -778,6 +879,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     int_float bst = best_idx_gain_data[i];
                                     float_type best_split_gain = get<1>(bst);
                                     size_t split_index = get<0>(bst);
+                                    //if(n_nodes_in_level==4 && tmp_index==0&&i==0){split_index = 356729;}
                                     if (!nodes_data[i + nid_offset+2*tmp_index].is_valid) {
                                         sp_data[i+2*tmp_index].split_fea_id = -1;
                                         sp_data[i+2*tmp_index].nid = -1;
@@ -905,8 +1007,8 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
         //set data
         auto y_predict_data = y_predict[device_id].device_data();
         device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
-            y_predict_data[i] = -0.975106f;
-            //y_predict_data[i] = 0.5f;
+            //y_predict_data[i] = -0.975106f;
+            y_predict_data[i] = -0.677626f;
         });
    });
     get_bin_ids();

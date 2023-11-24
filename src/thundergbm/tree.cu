@@ -29,12 +29,14 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
 
     //init root node
     GHPair sum_gh = thrust::reduce(thrust::cuda::par, gradients.device_data(), gradients.device_end());
+    LOG(INFO)<<"sum gradients "<<sum_gh;
     float_type lambda = param.lambda;
     device_loop<1, 1>(1, [=]__device__(int i) {
         Tree::TreeNode &root_node = node_data[0];
         root_node.sum_gh_pair = sum_gh;
         root_node.is_valid = true;
         root_node.calc_weight(lambda);
+        printf("root weight is %f\n",root_node.base_weight);
     });
 }
 
@@ -75,7 +77,7 @@ void Tree::preorder_traversal(int nid, int max_depth, int depth, string &s) cons
 }
 
 std::ostream &operator<<(std::ostream &os, const Tree::TreeNode &node) {
-    os << string_format("\nnid:%d,l:%d,v:%d,split_feature_id:%d,f:%f,gain:%f,r:%d,w:%f,", node.final_id, node.is_leaf,
+    os << string_format("\nnid: %d, leaf: %d, valid: %d ,split_feature_id: %d, value: %f, gain:%f , right?: %d, weight: %f, ", node.final_id, node.is_leaf,
                         node.is_valid,
                         node.split_feature_id, node.split_value, node.gain, node.default_right, node.base_weight);
     os << "g/h:" << node.sum_gh_pair;
