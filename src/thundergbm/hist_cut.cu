@@ -290,7 +290,7 @@ void HistCut::get_cut_points3(SparseColumns &columns, int max_num_bins, int n_in
         int s2 = tmp1[i+1];
         int e2 = tmp1[i+2];
 
-        for(int j = s;j<e;j--){
+        for(int j = s;j<e;j++){
             val_host[j] = tmp2[s2];
             s2++;
         }

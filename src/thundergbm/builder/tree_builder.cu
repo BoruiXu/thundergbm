@@ -207,5 +207,10 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
         tree.nodes.resize(this->trees.front().nodes.size());
         tree.nodes.copy_from(this->trees.front().nodes);
     }
+    for(int i =0;i<trees[0].nodes.size();i++){
+        LOG(INFO)<<"node "<<i<<" :";
+        LOG(INFO)<<trees[0].nodes.host_data()[i];
+        LOG(INFO)<<"*******************";
+    }
     return trees;
 }
