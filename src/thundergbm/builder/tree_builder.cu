@@ -82,6 +82,9 @@ void TreeBuilder::predict_in_training(int k) {
             while (nid != -1 && (nodes_data[nid].is_pruned)) nid = nodes_data[nid].parent_index;
             y_predict_data[i] += lr * nodes_data[nid].base_weight;
         });
+        for(int i =0;i<5;i++){
+            LOG(INFO)<<"in training prediction "<<i<<" "<<y_predict[device_id].host_data()[i];
+        }
     });
 }
 
@@ -207,10 +210,10 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
         tree.nodes.resize(this->trees.front().nodes.size());
         tree.nodes.copy_from(this->trees.front().nodes);
     }
-    for(int i =0;i<trees[0].nodes.size();i++){
-        LOG(INFO)<<"node "<<i<<" :";
-        LOG(INFO)<<trees[0].nodes.host_data()[i];
-        LOG(INFO)<<"*******************";
-    }
+    //for(int i =0;i<trees[0].nodes.size();i++){
+    //    LOG(INFO)<<"node "<<i<<" :";
+    //    LOG(INFO)<<trees[0].nodes.host_data()[i];
+    //    LOG(INFO)<<"*******************";
+    //}
     return trees;
 }

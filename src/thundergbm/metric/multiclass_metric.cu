@@ -36,8 +36,9 @@ float_type BinaryClassMetric::get_score(const SyncArray<float_type> &y_p) const 
     auto yp_data = y_p.device_data();
     SyncArray<int> is_true(n_instances);
     auto is_true_data = is_true.device_data();
+    
     device_loop(n_instances, [=] __device__(int i){
-        int max_k = (yp_data[i] > 0.5) ? 1 : 0;
+        int max_k = (1 / (1 + exp(-yp_data[i])) > 0.5) ? 1 : 0;
         is_true_data[i] = max_k == y_data[i];
     });
 
