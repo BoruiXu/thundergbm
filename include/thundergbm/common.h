@@ -38,6 +38,9 @@ std::string string_format(const std::string &format, Args ... args) {
 //typedef float float_type;
 typedef double float_type;
 
+typedef float temp_float;
+
+
 #define HOST_DEVICE __host__ __device__
 
 struct GHPair {
