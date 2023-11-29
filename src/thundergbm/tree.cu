@@ -37,6 +37,7 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
         root_node.is_valid = true;
         root_node.calc_weight(lambda);
     });
+    LOG(INFO)<<"root weight "<<nodes.host_data()[0].base_weight;
 }
 
 string Tree::dump(int depth) const {

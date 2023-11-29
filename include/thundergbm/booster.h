@@ -53,14 +53,22 @@ void Booster::init(const DataSet &dataSet, const GBMParam &param) {
     DO_ON_MULTI_DEVICES(n_devices, [&](int device_id) {
         y[device_id].copy_from(dataSet.y.data(), dataSet.n_instances());
     });
+
+    //init base score
+    //TODO no need to calculate many times
+    DO_ON_MULTI_DEVICES(n_devices, [&](int device_id){
+        obj->init_base_score(y[device_id], fbuilder->get_raw_y_predict()[device_id], gradients[device_id]);
+    });
 }
 
 void Booster::boost(vector<vector<Tree>> &boosted_model) {
     TIMED_FUNC(timerObj);
     std::unique_lock<std::mutex> lock(mtx);
-
     //update gradients
     DO_ON_MULTI_DEVICES(n_devices, [&](int device_id) {
+        //for(int i =0;i<5;i++){
+        //    LOG(INFO)<<"prediction index is "<<i<<" value is "<<fbuilder->get_y_predict()[device_id].host_data()[i];
+        //}
         obj->get_gradient(y[device_id], fbuilder->get_y_predict()[device_id], gradients[device_id]);
     });
     if (param.bagging) rowSampler.do_bagging(gradients);

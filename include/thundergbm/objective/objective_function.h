@@ -15,6 +15,11 @@ public:
     get_gradient(const SyncArray<float_type> &y, const SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair) = 0;
     virtual void
     predict_transform(SyncArray<float_type> &y){};
+    
+    //init base score
+    //SyncArray<GHPair> &gh_pair for tmporary storage
+    virtual void init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){LOG(INFO)<<"not implement base score function!!!!!!";}
+
     virtual void configure(GBMParam param, const DataSet &dataset) = 0;
     virtual string default_metric_name() = 0;
 

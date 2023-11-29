@@ -82,9 +82,9 @@ void TreeBuilder::predict_in_training(int k) {
             while (nid != -1 && (nodes_data[nid].is_pruned)) nid = nodes_data[nid].parent_index;
             y_predict_data[i] += lr * nodes_data[nid].base_weight;
         });
-        for(int i =0;i<5;i++){
-            LOG(INFO)<<"in training prediction "<<i<<" "<<y_predict[device_id].host_data()[i];
-        }
+        //for(int i =0;i<5;i++){
+        //    LOG(INFO)<<"in training prediction "<<i<<" "<<y_predict[device_id].host_data()[i];
+        //}
     });
 }
 

@@ -302,7 +302,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                         inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + n_bins,
                                       hist.device_data(), hist.device_data());
-	                    LOG(INFO)<<"root prefix hist feature 27 "<<hist.host_data()[cut.cut_row_ptr.host_data()[28]-1];
+	                    //LOG(INFO)<<"root prefix hist feature 27 "<<hist.host_data()[cut.cut_row_ptr.host_data()[28]-1];
 
                         //auto tmp_d_h1 = hist.device_data();
                         //auto tmp_d_h2 = tmp_hist.device_data();
@@ -535,7 +535,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             }
                             if (n_ins_left > n_ins_right)
                                 swap(nid0_to_compute, nid0_to_substract);
-                            LOG(INFO)<<"n_nodes_in_level "<<n_nodes_in_level<<", index "<<i<<", n_ins_left "<<n_ins_left<<", n_ins_right "<<n_ins_right;
+                            //LOG(INFO)<<"n_nodes_in_level "<<n_nodes_in_level<<", index "<<i<<", n_ins_left "<<n_ins_left<<", n_ins_right "<<n_ins_right;
                             size_t computed_hist_pos = nid0_to_compute%2;
                             size_t to_compute_hist_pos = 1-computed_hist_pos;
 
@@ -908,10 +908,11 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
         last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
         LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
         //set data
-        auto y_predict_data = y_predict[device_id].device_data();
-        device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
-            y_predict_data[i] = -0.677626f;
-        });
+        //auto y_predict_data = y_predict[device_id].device_data();
+        //device_loop(y_predict[device_id].size(), [=]__device__(size_t i) {
+        //    //y_predict_data[i] = -0.677626f;
+        //    y_predict_data[i] = -0.677248f;
+        //});
    });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {
