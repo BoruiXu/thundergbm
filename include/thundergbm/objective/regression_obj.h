@@ -71,7 +71,7 @@ public:
     }
 
     //base score
-    void init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){ 
+    temp_float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){ 
 
         //get gradients first, SyncArray<GHPair> &gh_pair for temporal storage
         get_gradient(y,y_p,gh_pair);
@@ -89,8 +89,7 @@ public:
         device_loop(y_p.size(), [=]__device__(int i) {
             y_p_data[i] = base_score;
         });
-         
-        
+        return base_score;
     }
     string default_metric_name() override{
         return "error";

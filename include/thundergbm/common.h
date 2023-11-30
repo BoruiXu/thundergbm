@@ -106,6 +106,7 @@ struct GBMParam {
 
     //for histogram
     int max_num_bin;
+    float base_score=0;
 
     int n_device;
 

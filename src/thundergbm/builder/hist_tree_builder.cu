@@ -463,10 +463,11 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 sp_data[i].fea_missing_gh = missing_gh_data[i * n_column + hist_fid[split_index]];
                                 sp_data[i].default_right = best_split_gain < 0;
                                 sp_data[i].lch_sum_gh = GHPair(0);
-                                sp_data[i].fval = cut_val_data[cut_row_ptr_data[fid]] - fabsf(cut_val_data[cut_row_ptr_data[fid]])+ 1e-5;
+                                sp_data[i].fval = cut_val_data[cut_row_ptr_data[fid]] - fabsf(cut_val_data[cut_row_ptr_data[fid]])- 1e-5;
                                 if(split_index!=cut_row_ptr_data[fid]){
                                     sp_data[i].lch_sum_gh = hist_data[split_index-1];
-                                    sp_data[i].fval = cut_val_data[split_index % n_bins];
+                                    sp_data[i].fval = cut_val_data[split_index % n_bins-1];
+                                    //sp_data[i].split_bid -=1;
                                 }
                             });
                         }
@@ -515,12 +516,17 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         //test
                         // SyncArray<GHPair> test(2*n_bins);
                         // auto test_data = test.device_data();
+                        //LOG(INFO)<<"level "<<level<<" nid_offset "<<nid_offset;
                         for (int i = 0; i < n_nodes_in_level / 2; ++i) {
                             size_t tmp_index = i;
                             int nid0_to_compute = i * 2;
                             int nid0_to_substract = i * 2 + 1;
                             int n_ins_left = node_ptr_data[nid0_to_compute + 1] - node_ptr_data[nid0_to_compute];
                             int n_ins_right = node_ptr_data[nid0_to_substract + 1] - node_ptr_data[nid0_to_substract];
+                            
+                            //LOG(INFO)<<"node index  "<<nid_offset+i*2<<", n_ins_left "<<n_ins_left;
+                            //LOG(INFO)<<"node index  "<<nid_offset+i*2+1<<", n_ins_right "<<n_ins_right;
+                            
                             if (max(n_ins_left, n_ins_right) == 0) 
                             {   
                                 auto nodes_data = tree.nodes.device_data();
@@ -535,7 +541,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             }
                             if (n_ins_left > n_ins_right)
                                 swap(nid0_to_compute, nid0_to_substract);
-                            //LOG(INFO)<<"n_nodes_in_level "<<n_nodes_in_level<<", index "<<i<<", n_ins_left "<<n_ins_left<<", n_ins_right "<<n_ins_right;
+                            
                             size_t computed_hist_pos = nid0_to_compute%2;
                             size_t to_compute_hist_pos = 1-computed_hist_pos;
 
@@ -749,13 +755,13 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 LOG(DEBUG) << "best rank & gain = " << best_idx_gain;
                             }
 
-                            //if((n_nodes_in_level==4&&tmp_index==1)){
-                            //    int tmp_pos = cut.cut_row_ptr.host_data()[2083]; 
-                            //    LOG(INFO)<<"2083 first index is "<<tmp_pos;
-                            //    LOG(INFO)<<"node 6 356506 index the gain is "<<gain.host_data()[n_bins+356506];
-                            //    LOG(INFO)<<"missing is "<<missing_gh.host_data()[n_column+2083];
-                            //    LOG(INFO)<<"prefix hist last 2083 is "<<hist.host_data()[n_bins+cut.cut_row_ptr.host_data()[2084]-1];
-                            //    //LOG(INFO)<<"best gain in node  is "<<best_idx_gain.host_data()[1]<<" n_bins is "<<n_bins;
+                            //if((n_nodes_in_level==4&&tmp_index==0)){
+                            //    //int tmp_pos = cut.cut_row_ptr.host_data()[19546]; 
+                            //    //LOG(INFO)<<"19546 first index is "<<tmp_pos;
+                            //    LOG(INFO)<<"node 4 809929 index the gain is "<<gain.host_data()[n_bins+809929];
+                            //    LOG(INFO)<<"node 4 809929 missing is "<<missing_gh.host_data()[n_column+7549];
+                            //    LOG(INFO)<<"node 4 809929 prefix  is "<<hist.host_data()[n_bins+809929];
+                            //    LOG(INFO)<<"best gain in node  is "<<best_idx_gain.host_data()[1]<<" n_bins is "<<n_bins;
                             //}
                             //get split points
                             {
@@ -791,11 +797,12 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     sp_data[i+2*tmp_index].default_right = best_split_gain < 0;
                                    
                                     sp_data[i+2*tmp_index].lch_sum_gh = GHPair(0);
-                                    sp_data[i+2*tmp_index].fval = cut_val_data[cut_row_ptr_data[fid]] - fabsf(cut_val_data[cut_row_ptr_data[fid]])+ 1e-5;
+                                    sp_data[i+2*tmp_index].fval = cut_val_data[cut_row_ptr_data[fid]] - fabsf(cut_val_data[cut_row_ptr_data[fid]])- 1e-5;
                                     //TODO improve implementation
                                     if(split_index!=i*n_bins+cut_row_ptr_data[fid]){
                                         sp_data[i+2*tmp_index].lch_sum_gh = hist_data[i*n_bins+split_index%n_bins-1];
                                         sp_data[i+2*tmp_index].fval = cut_val_data[split_index % n_bins-1];
+                                        //sp_data[i+2*tmp_index].split_bid -=1;
                                     }
 
                                 });
@@ -1025,9 +1032,6 @@ void HistTreeBuilder::update_ins2node_id() {
 
                 if ((bid == -1 && node.default_right) || (bid >= split_bid && bid>=0))
                     to_left = false;
-                //if(to_left!=to_left2){
-                //    printf("node default_right %d, to_left is %d, to_left2 is %d, iid is %d, bid is %d, split bid is %d \n ",node.default_right,to_left,to_left2,iid,bid,split_bid);
-                //}
                  
                 if (to_left) {
                     //goes to left child

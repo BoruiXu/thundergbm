@@ -6,6 +6,7 @@
 #include "thundergbm/util/multi_device.h"
 #include "thundergbm/util/device_lambda.cuh"
 #include <chrono>
+#include <fstream>
 typedef std::chrono::high_resolution_clock Clock;
 #define TDEF(x_) std::chrono::high_resolution_clock::time_point x_##_t0, x_##_t1;
 #define TSTART(x_) x_##_t0 = Clock::now();
@@ -210,10 +211,28 @@ vector<Tree> TreeBuilder::build_approximate(const MSyncArray<GHPair> &gradients)
         tree.nodes.resize(this->trees.front().nodes.size());
         tree.nodes.copy_from(this->trees.front().nodes);
     }
+    
+    //output nodes to files
+    //std::ofstream outfile("node_info.txt");
+    //int aa = 0;
     //for(int i =0;i<trees[0].nodes.size();i++){
-    //    LOG(INFO)<<"node "<<i<<" :";
-    //    LOG(INFO)<<trees[0].nodes.host_data()[i];
-    //    LOG(INFO)<<"*******************";
+    //    //LOG(INFO)<<"node "<<i<<" :";
+    //    //LOG(INFO)<<trees[0].nodes.host_data()[i];
+    //    //LOG(INFO)<<"*******************";
+    //    auto tmp_node = trees[0].nodes.host_data();
+    //    if(tmp_node[i].is_valid){
+    //        outfile<<"tree node: "<<i<<", ";
+    //        outfile<<"final node: "<<tmp_node[i].final_id<<", ";
+    //        outfile<<"split feature: "<<tmp_node[i].split_feature_id<<", ";
+    //        outfile<<"split value: "<<tmp_node[i].split_value<<", ";
+    //        outfile<<"leaf node: "<<tmp_node[i].is_leaf<<", ";
+    //        outfile<<"valid node: "<<!tmp_node[i].is_valid<<", ";
+    //        outfile<<"node weight: "<<tmp_node[i].base_weight<<", ";
+    //        outfile<<"node gain: "<<tmp_node[i].gain<<", ";
+    //        outfile<<"node hess: "<<tmp_node[i].sum_gh_pair.h<<"\n";
+    //    }
+
     //}
+    //outfile.close();
     return trees;
 }

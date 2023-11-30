@@ -18,7 +18,10 @@ public:
     
     //init base score
     //SyncArray<GHPair> &gh_pair for tmporary storage
-    virtual void init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){LOG(INFO)<<"not implement base score function!!!!!!";}
+    virtual temp_float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){
+        LOG(INFO)<<"not implement base score function!!!!!!";
+        return 0;
+    }
 
     virtual void configure(GBMParam param, const DataSet &dataset) = 0;
     virtual string default_metric_name() = 0;

@@ -17,7 +17,7 @@
 std::mutex mtx;
 class Booster {
 public:
-    void init(const DataSet &dataSet, const GBMParam &param);
+    void init(const DataSet &dataSet, GBMParam &param);
 
     void boost(vector<vector<Tree>> &boosted_model);
 
@@ -32,7 +32,7 @@ private:
     int n_devices;
 };
 
-void Booster::init(const DataSet &dataSet, const GBMParam &param) {
+void Booster::init(const DataSet &dataSet, GBMParam &param) {
     int n_available_device;
     cudaGetDeviceCount(&n_available_device);
     CHECK_GE(n_available_device, param.n_device) << "only " << n_available_device
@@ -57,7 +57,7 @@ void Booster::init(const DataSet &dataSet, const GBMParam &param) {
     //init base score
     //TODO no need to calculate many times
     DO_ON_MULTI_DEVICES(n_devices, [&](int device_id){
-        obj->init_base_score(y[device_id], fbuilder->get_raw_y_predict()[device_id], gradients[device_id]);
+        param.base_score = obj->init_base_score(y[device_id], fbuilder->get_raw_y_predict()[device_id], gradients[device_id]);
     });
 }
 
