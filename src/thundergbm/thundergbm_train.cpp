@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     TreeTrainer trainer;
     boosted_model = trainer.train(model_param, dataset);
     
-    std::filesystem::path pathObj(model_param.path);
-    std::string datasetName = pathObj.filename().string();
-    parser.save_model(datasetName+".model", model_param, boosted_model, dataset);
+    //std::filesystem::path pathObj(model_param.path);
+    //std::string datasetName = pathObj.filename().string();
+    parser.save_model("tgbm.model", model_param, boosted_model, dataset);
 }

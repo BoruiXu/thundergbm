@@ -35,8 +35,8 @@ std::string string_format(const std::string &format, Args ... args) {
 }
 
 //data types
-//typedef float float_type;
-typedef double float_type;
+typedef float float_type;
+//typedef double float_type;
 
 #define HOST_DEVICE __host__ __device__
 
