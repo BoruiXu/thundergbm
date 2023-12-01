@@ -30,6 +30,27 @@ public:
             y_data[i] = Loss<float_type>::predict_transform(y_data[i]);
         });
     }
+    
+    //base score
+    float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){ 
+
+        //get gradients first, SyncArray<GHPair> &gh_pair for temporal storage
+        get_gradient(y,y_p,gh_pair);
+
+        //get sum gh_pair
+        GHPair sum_gh = thrust::reduce(thrust::cuda::par, gh_pair.device_data(), gh_pair.device_end());
+
+        //get weight
+        float weight =  -sum_gh.g / fmax(sum_gh.h, (double)(1e-6));
+        
+        float base_score = weight; 
+        LOG(INFO)<<"base_score "<<base_score;
+        auto y_p_data = y_p.device_data();
+        device_loop(y_p.size(), [=]__device__(int i) {
+            y_p_data[i] = base_score;
+        });
+        return base_score;
+    }
 
     void configure(GBMParam param, const DataSet &dataset) override {}
 
