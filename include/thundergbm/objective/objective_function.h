@@ -18,7 +18,7 @@ public:
     
     //init base score
     //SyncArray<GHPair> &gh_pair for tmporary storage
-    virtual temp_float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){
+    virtual float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){
         LOG(INFO)<<"not implement base score function!!!!!!";
         return 0;
     }

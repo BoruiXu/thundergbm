@@ -29,7 +29,7 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
 
     //init root node
     GHPair sum_gh = thrust::reduce(thrust::cuda::par, gradients.device_data(), gradients.device_end());
-    LOG(INFO)<<"sum gradients "<<sum_gh;
+    //LOG(INFO)<<"sum gradients "<<sum_gh;
     float_type lambda = param.lambda;
     device_loop<1, 1>(1, [=]__device__(int i) {
         Tree::TreeNode &root_node = node_data[0];
@@ -37,7 +37,7 @@ void Tree::init2(const SyncArray<GHPair> &gradients, const GBMParam &param) {
         root_node.is_valid = true;
         root_node.calc_weight(lambda);
     });
-    LOG(INFO)<<"root weight "<<nodes.host_data()[0].base_weight;
+    //LOG(INFO)<<"root weight "<<nodes.host_data()[0].base_weight;
 }
 
 string Tree::dump(int depth) const {

@@ -71,7 +71,7 @@ public:
     }
 
     //base score
-    temp_float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){ 
+    float init_base_score(const SyncArray<float_type> &y,SyncArray<float_type> &y_p, SyncArray<GHPair> &gh_pair){ 
 
         //get gradients first, SyncArray<GHPair> &gh_pair for temporal storage
         get_gradient(y,y_p,gh_pair);
@@ -80,10 +80,10 @@ public:
         GHPair sum_gh = thrust::reduce(thrust::cuda::par, gh_pair.device_data(), gh_pair.device_end());
 
         //get weight
-        temp_float weight =  -sum_gh.g / fmax(sum_gh.h, (double)(1e-6));
+        float weight =  -sum_gh.g / fmax(sum_gh.h, (double)(1e-6));
         //sigmod transform
         weight = 1 / (1 + expf(-weight));
-        temp_float base_score = -logf(1.0f / weight - 1.0f);
+        float base_score = -logf(1.0f / weight - 1.0f);
         LOG(INFO)<<"base_score "<<base_score;
         auto y_p_data = y_p.device_data();
         device_loop(y_p.size(), [=]__device__(int i) {
