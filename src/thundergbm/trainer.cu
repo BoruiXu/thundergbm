@@ -14,8 +14,9 @@
 #include "chrono"
 #include <thundergbm/parser.h>
 using namespace std;
-long long total_sp_time = 0;
-long long total_sort_time_hist = 0;
+long long total_hist_time = 0;
+long long total_split_update_time = 0;
+long long total_evaluate_time = 0;
 long long total_exact_prefix_sum_time = 0;
 
 
@@ -51,12 +52,14 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
         //one iteration may produce multiple trees, depending on objectives
         booster.boost(boosted_model);
     }
-    LOG(INFO)<<"total  hist construction time is "<<total_sort_time_hist/1e6;
-    LOG(INFO)<<"total  exact prefix sum time is "<<total_exact_prefix_sum_time/1e6;
-    LOG(INFO)<<"total update instance to node index array time is "<<total_sp_time/1e6;
+    LOG(INFO)<<"total  hist construction time is "<<total_hist_time/1e6;
+    //LOG(INFO)<<"total  exact prefix sum time is "<<total_exact_prefix_sum_time/1e6;
+    LOG(INFO)<<"total evaluate time is "<<total_evaluate_time/1e6;
+    LOG(INFO)<<"total split and update is "<<total_split_update_time/1e6;
     LOG(INFO)<<"initialization time = "<<init_time.count();
     auto stop = timer.now();
     std::chrono::duration<float> training_time = stop - start;
+    LOG(INFO)<<"other time is "<<training_time.count()-(total_hist_time+total_evaluate_time+total_split_update_time)/1e6;
     LOG(INFO) << "all training time = " << training_time.count();
     //LOG(INFO)<<"total time = "<<convert_time+training_time.count();
 

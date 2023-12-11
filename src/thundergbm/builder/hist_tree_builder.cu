@@ -24,8 +24,8 @@ typedef std::chrono::high_resolution_clock Clock;
 #define TPRINT(x_, str) printf("%-20s \t%.6f\t sec\n", str, std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()/1e6);
 #define TINT(x_) std::chrono::duration_cast<std::chrono::microseconds>(x_##_t1 - x_##_t0).count()
 
-extern long long total_sort_time_hist;
-extern long long total_time_hist1;
+extern long long total_hist_time;
+extern long long total_evaluate_time;
 
 
 void check_hist_res(GHPair* hist, GHPair* hist_test, int n_bins){
@@ -58,7 +58,7 @@ void HistTreeBuilder::get_bin_ids() {
         auto cut_row_ptr = cut.cut_row_ptr.device_data();
         auto cut_points_ptr = cut.cut_points_val.device_data();
         
-        int n_block = fminf((nnz / n_column - 1) / 256 + 1, 4 * 56);
+        int n_block = fminf((nnz / n_column - 1) / 256 + 1, 6 * 84);
         //original order csc
         //auto csc_val_origin_data = columns.csc_val_origin.device_data();
         
@@ -157,7 +157,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
     auto csr_col_idx_data = csr_col_idx.device_data();
     auto csr_bin_id_data = csr_bin_id.device_data();
     LOG(TRACE) << "start finding split";
-    TDEF(sort_time)
+    TDEF(hist)
+    TDEF(evaluate)
 
     //new variables
     size_t len_hist = 2*n_bins;
@@ -176,7 +177,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
         auto i2fid = [=] __device__(int i) { return cut_fid_data[i % n_bins]; };
         auto hist_fid = make_transform_iterator(counting_iterator<int>(0), i2fid);
         {
-            TSTART(sort_time)
             {
                 TIMED_SCOPE(timerObj, "build hist");
                 {
@@ -185,6 +185,9 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                     LOG(DEBUG) << "shared memory size = " << smem_size / 1024.0 << " KB";
                     if (n_nodes_in_level == 1) {
                         //root
+
+                        TSTART(hist)
+
                         auto hist_data = hist.device_data();
                         auto cut_row_ptr_data = cut.cut_row_ptr.device_data();
                         auto gh_data = gh_pair.device_data();
@@ -205,6 +208,9 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 atomicAdd(&dest.g, src.g);                            
                         
                         },n_block);
+
+                        TEND(hist)
+                        total_hist_time+=TINT(hist);
                         
                         //LOG(INFO)<<"root hist feature 4447 last bin"<<hist.host_data()[cut.cut_row_ptr.host_data()[4448]-1];
                         //LOG(INFO)<<"root hist feature 4447 last index is "<<cut.cut_row_ptr.host_data()[4448]-1;
@@ -234,7 +240,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         //        atomicAdd(&dest.g, src.g);
                         //});
 
-
+                        TSTART(evaluate)
 
                         //new code 
                         last_hist.copy_from(hist.device_data(),n_bins);
@@ -376,6 +382,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 }
                             });
                         }
+                        TEND(evaluate)
+                        total_evaluate_time+=TINT(evaluate);
                         
                     } else {
                         //otherwise
@@ -450,6 +458,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                             size_t computed_hist_pos = nid0_to_compute%2;
                             size_t to_compute_hist_pos = 1-computed_hist_pos;
 
+                            TSTART(hist)
                             //compute
                             {
                                 int nid0 = nid0_to_compute;
@@ -525,6 +534,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 	                        	//LOG(INFO)<<"compute hist feature 4447 "<<hist.host_data()[computed_hist_pos * n_bins+cut.cut_row_ptr.host_data()[4448]-1];
 	                        	//LOG(INFO)<<"subtract hist feature 4447 "<<hist.host_data()[to_compute_hist_pos * n_bins+cut.cut_row_ptr.host_data()[4448]-1];
                             }
+                            TEND(hist)
+                            total_hist_time+=TINT(hist);
                             auto t_copy_end = timer.now();
                             std::chrono::duration<double> cp_used_time = t_copy_end - t_copy_start;
                             this->total_copy_time += cp_used_time.count();
@@ -557,6 +568,7 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                             cudaDeviceSynchronize();
                             
+                            TSTART(evaluate)
                             inclusive_scan_by_key(cuda::par, hist_fid, hist_fid + 2*n_bins,
                                         hist.device_data(), 
                                         hist.device_data());
@@ -698,7 +710,8 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                 
                             }
 
-                            
+                           TEND(evaluate)
+                           total_evaluate_time+=TINT(evaluate);
 
 
                         }  // end for each node
@@ -715,8 +728,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                 }
                 
             }
-            TEND(sort_time)
-            total_sort_time_hist+=TINT(sort_time);
         }
         //calculate gain of each split
 
