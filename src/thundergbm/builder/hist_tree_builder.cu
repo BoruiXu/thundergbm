@@ -104,13 +104,20 @@ void HistTreeBuilder::get_bin_ids() {
             auto csr_col_idx_data = csr_col_idx.device_data();
             auto csr_val_data = columns.csr_val.device_data();
             auto csr_bin_id_data = csr_bin_id.device_data();
-            device_loop_2d(n_instances, csr_row_ptr.device_data(), [=]__device__(int instance_id, int i) {
+            //device_loop_2d(n_instances, csr_row_ptr.device_data(), [=]__device__(int instance_id, int i) {
+            //    auto cid = csr_col_idx_data[i];
+            //    auto search_begin = cut_points_ptr + cut_row_ptr[cid];
+            //    auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
+            //    auto val = csr_val_data[i];
+            //    csr_bin_id_data[i] = upperBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
+            //}, n_block);
+            device_loop(nnz, [=]__device__( int i) {
                 auto cid = csr_col_idx_data[i];
                 auto search_begin = cut_points_ptr + cut_row_ptr[cid];
                 auto search_end = cut_points_ptr + cut_row_ptr[cid + 1];
                 auto val = csr_val_data[i];
                 csr_bin_id_data[i] = upperBound(search_begin, search_end, val) - search_begin + cut_row_ptr[cid];
-            }, n_block);
+            });
 
         }
         //columns.csc_val_origin.clear_device();
