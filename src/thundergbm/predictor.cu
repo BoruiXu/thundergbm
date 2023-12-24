@@ -87,7 +87,7 @@ void Predictor::predict_raw(const GBMParam &model_param, const vector<vector<Tre
         //use shared memory to store dense instances
         anonymous_kernel([=]__device__() {
             auto get_next_child = [&](Tree::TreeNode node, float_type feaValue) {
-                return feaValue <= node.split_value ? node.lch_index : node.rch_index;
+                return feaValue < node.split_value ? node.lch_index : node.rch_index;
             };
             extern __shared__ float_type dense_data[];
             int iid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -136,7 +136,7 @@ void Predictor::predict_raw(const GBMParam &model_param, const vector<vector<Tre
         //use sparse format and binary search
         device_loop(n_instances, [=]__device__(int iid) {
             auto get_next_child = [&](Tree::TreeNode node, float_type feaValue) {
-                return feaValue <= node.split_value ? node.lch_index : node.rch_index;
+                return feaValue < node.split_value ? node.lch_index : node.rch_index;
             };
             auto get_val = [&](const int *row_idx, const float_type *row_val, int row_len, int idx,
                                bool *is_missing) -> float_type {
