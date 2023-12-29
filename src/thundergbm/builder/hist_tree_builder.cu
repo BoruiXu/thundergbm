@@ -120,6 +120,32 @@ void HistTreeBuilder::get_bin_ids() {
             });
 
         }
+
+        //if dataset is dense
+        //convert to dense_bin id 
+        if(columns.dense_data){
+            auto &dense_bin_id = this->dense_bin_id[device_id];
+            auto dense_bin_id_data = dense_bin_id.device_data();
+            size_t dense_size = n_instances * n_column;
+            auto max_num_bin = param.max_num_bin;
+            columns.dense_size = dense_size;
+
+            dense_bin_id.resize(dense_size);
+
+            device_loop(dense_size, [=]__device__(size_t i){
+                dense_bin_id_data[i] = max_num_bin;
+            });
+
+            device_loop_2d(n_instances, csr_row_ptr.device_data(), [=]__device__(size_t instance_id, size_t i) {
+                auto fid = csr_col_idx_data[i];
+                auto tmp_bin_id = csr_bin_id_data[i];
+                dense_bin_id_data[instance_id*n_column+fid] = tmp_bin_id;
+            }, n_block);
+
+
+        }
+
+
         //columns.csc_val_origin.clear_device();
         //columns.csc_val_origin.resize(0);
         columns.csr_val.resize(0);
@@ -128,6 +154,80 @@ void HistTreeBuilder::get_bin_ids() {
         SyncMem::clear_cache();
 
     });
+}
+
+void HistTreeBuilder::dense_find_split(int level, int device_id){
+    
+    const SparseColumns &columns = shards[device_id].columns;
+    SyncArray<int> &nid = ins2node_id[device_id];
+    SyncArray<GHPair> &gh_pair = gradients[device_id];
+    Tree &tree = trees[device_id];
+    SyncArray<SplitPoint> &sp = this->sp[device_id];
+    SyncArray<bool> &ignored_set = shards[device_id].ignored_set;
+    HistCut &cut = this->cut[device_id];
+    auto &dense_bin_id = this->dense_bin_id[device_id];
+    auto &last_hist = this->last_hist[device_id];
+
+    TIMED_FUNC(timerObj);
+    int n_nodes_in_level = static_cast<int>(pow(2, level));
+    int nid_offset = static_cast<int>(pow(2, level) - 1);
+    int n_column = columns.n_column;
+    size_t dense_size = columns.dense_size;
+    size_t n_partition = n_column * n_nodes_in_level;
+    int n_bins = cut.cut_points_val.size();
+    int n_max_nodes = 1 << (param.depth-1);
+    size_t n_max_splits = n_max_nodes * (long long)n_bins;
+    size_t n_split = n_nodes_in_level * (long long)n_bins;
+
+    int n_block = fminf((columns.nnz / this->n_instances - 1) / 256 + 1, 4 * 84);
+    int avg_f = (columns.nnz / this->n_instances );
+    
+    LOG(TRACE) << "start finding split";
+
+    //new variables
+    size_t len_hist = 2*n_bins;
+    size_t len_missing = 2*n_column;
+
+    //remember resize variable to clear
+    //find the best split locally
+    {
+        using namespace thrust;
+        //calculate split information for each split
+        SyncArray<GHPair> hist(len_hist);
+        SyncArray<GHPair> missing_gh(len_missing);
+        auto cut_fid_data = cut.cut_fid.device_data();
+        auto i2fid = [=] __device__(int i) { return cut_fid_data[i % n_bins]; };
+        auto hist_fid = make_transform_iterator(counting_iterator<int>(0), i2fid);
+        
+        //root level
+        if(n_nodes_in_level == 1){
+            auto hist_data = hist.device_data();
+            auto cut_row_ptr_data = cut.cut_row_ptr.device_data();
+            auto gh_data = gh_pair.device_data();
+            auto dense_bin_id_data = dense_bin_id.device_data();
+            auto max_num_bin = param.max_num_bin;
+            auto n_instances = this->n_instances;
+
+            //histogram consturction
+            device_loop(dense_size, [=]__device__(size_t i){
+                size_t iid = i / n_column;
+                size_t fid = i % n_column;
+                size_t bid = dense_bin_id_data[i];
+                if (bid != max_num_bin){
+                    const GHPair src = gh_data[iid];
+                    GHPair &dest = hist_data[bid];
+                    if(src.h != 0)
+                        atomicAdd(&dest.h, src.h);
+                    if(src.g != 0)
+                        atomicAdd(&dest.g, src.g);
+                }
+            });
+
+        }
+
+
+    }
+    
 }
 
 void HistTreeBuilder::find_split(int level, int device_id) {
@@ -763,7 +863,7 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
     else
         columns.csr2csc_gpu(dataset, v_columns);
     cut = vector<HistCut>(param.n_device);
-    //dense_bin_id = MSyncArray<unsigned char>(param.n_device);
+    dense_bin_id = MSyncArray<int>(param.n_device);
     last_hist = MSyncArray<GHPair>(param.n_device);
 
     //csr bin id

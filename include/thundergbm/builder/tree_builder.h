@@ -34,7 +34,7 @@ public:
 
 protected:
     vector<Shard> shards;
-    int n_instances;
+    size_t n_instances;
     vector<Tree> trees;
     MSyncArray<int> ins2node_id;
     MSyncArray<SplitPoint> sp;

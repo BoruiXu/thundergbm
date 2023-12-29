@@ -26,9 +26,11 @@ public:
 
 
 private:
+    void dense_find_split(int level, int device_id);
+    
     vector<HistCut> cut;
     MSyncArray<unsigned char> char_dense_bin_id;
-    MSyncArray<unsigned char> dense_bin_id;
+    MSyncArray<int> dense_bin_id;
     MSyncArray<GHPair> last_hist;
 
     //store csr dense_bin_id
@@ -43,6 +45,9 @@ private:
     double total_dp_time = 0;
     double total_copy_time = 0;
     bool use_gpu = 1;
+
+    //dense size
+    size_t dense_size = 0;
 
 };
 

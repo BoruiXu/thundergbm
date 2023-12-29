@@ -51,6 +51,8 @@ void SparseColumns::csr2csc_gpu(
     n_column = dataset.n_features_;
     n_row = dataset.n_instances();
     nnz = dataset.csr_val.size();
+    float_type density = (float_type)nnz/n_row/n_column;
+    LOG(INFO)<<"data density is "<<density;
 
 #ifdef CSC    
     cusparseHandle_t handle;
@@ -123,6 +125,11 @@ void SparseColumns::csr2csc_gpu(
             columns.nnz = nnz_sub;
             columns.n_column = n_column_sub;
             columns.n_row = n_row;
+
+            if(density>0.5){
+                columns.dense_data = true;
+                //convert to dense format
+            }
         }
     });
     //SyncMem::clear_cache();
