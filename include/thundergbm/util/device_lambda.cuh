@@ -45,6 +45,7 @@ __global__ void lambda_2d_maximum_sparse_kernel(const int *len2, const int maxim
 template<int NUM_BLOCK = 32 * 84, int BLOCK_SIZE = 256, typename L>
 inline void device_loop(size_t len, L lambda) {
     if (len > 0) {
+        //int grid = (len+BLOCK_SIZE-1)/BLOCK_SIZE;
         lambda_kernel << < NUM_BLOCK, BLOCK_SIZE >> > (len, lambda);
         cudaDeviceSynchronize();
         /*cudaError_t error = cudaPeekAtLastError();*/

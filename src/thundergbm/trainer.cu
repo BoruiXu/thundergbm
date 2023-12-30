@@ -18,7 +18,7 @@ long long total_hist_time = 0;
 long long total_split_update_time = 0;
 long long total_evaluate_time = 0;
 long long total_exact_prefix_sum_time = 0;
-
+long long test_time = 0;
 
 vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset) {
     if (param.tree_method == "auto")
@@ -61,7 +61,7 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
     std::chrono::duration<float> training_time = stop - start;
     LOG(INFO)<<"other time is "<<training_time.count()-(total_hist_time+total_evaluate_time+total_split_update_time)/1e6;
     LOG(INFO) << "all training time = " << training_time.count();
-    //LOG(INFO)<<"total time = "<<convert_time+training_time.count();
+    LOG(INFO)<<"test histogram  time = "<<test_time/1e6;
 
     std::atexit([]() {
         SyncMem::clear_cache();
