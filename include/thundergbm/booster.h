@@ -19,7 +19,7 @@ class Booster {
 public:
     void init(const DataSet &dataSet, GBMParam &param);
 
-    void boost(vector<vector<Tree>> &boosted_model);
+    void boost(vector<vector<Tree>> &boosted_model,int epoch);
 
 private:
     MSyncArray<GHPair> gradients;
@@ -61,7 +61,7 @@ void Booster::init(const DataSet &dataSet, GBMParam &param) {
     });
 }
 
-void Booster::boost(vector<vector<Tree>> &boosted_model) {
+void Booster::boost(vector<vector<Tree>> &boosted_model,int epoch) {
     TIMED_FUNC(timerObj);
     std::unique_lock<std::mutex> lock(mtx);
     //update gradients
@@ -79,7 +79,7 @@ void Booster::boost(vector<vector<Tree>> &boosted_model) {
     PERFORMANCE_CHECKPOINT(timerObj);
     //show metric on training set
     auto res =  metric->get_score(fbuilder->get_y_predict().front());
-    LOG(INFO) << metric->get_name() << " = " <<res<<" acc = "<< (1-res);
+    LOG(INFO) <<"["<<epoch<<"] "<< metric->get_name() << " = " <<res<<" acc = "<< (1-res);
 }
 
 #endif //THUNDERGBM_BOOSTER_H

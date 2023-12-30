@@ -50,7 +50,7 @@ vector<vector<Tree>> TreeTrainer::train(GBMParam &param, const DataSet &dataset)
     std::chrono::duration<float> init_time = stop_init - start;
     for (int i = 0; i < param.n_trees; ++i) {
         //one iteration may produce multiple trees, depending on objectives
-        booster.boost(boosted_model);
+        booster.boost(boosted_model,i);
     }
     LOG(INFO)<<"total  hist construction time is "<<total_hist_time/1e6;
     //LOG(INFO)<<"total  exact prefix sum time is "<<total_exact_prefix_sum_time/1e6;
