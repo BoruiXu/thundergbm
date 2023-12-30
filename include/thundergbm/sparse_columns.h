@@ -27,7 +27,7 @@ public:
     //dense ?
     bool dense_data = false;
     //SyncArray<float_type> dense_val;
-    SyncArray<size_t> dense_size = 0;
+    size_t dense_size = 0;
 
     int n_column;
     int n_row;
