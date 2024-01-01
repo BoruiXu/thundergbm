@@ -142,13 +142,16 @@ void HistTreeBuilder::find_split(int level, int device_id) {
     HistCut &cut = this->cut[device_id];
     //auto &dense_bin_id = this->dense_bin_id[device_id];
     auto &last_hist = this->last_hist[device_id];
-
+    int max_trick_depth = columns.max_trick_depth;
+    int max_trick_nodes = columns.max_trick_nodes;
+    
     TIMED_FUNC(timerObj);
     int n_nodes_in_level = static_cast<int>(pow(2, level));
     int nid_offset = static_cast<int>(pow(2, level) - 1);
     int n_column = columns.n_column;
     size_t n_partition = n_column * n_nodes_in_level;
     int n_bins = cut.cut_points_val.size();
+    //max nodes needs to build histograms
     int n_max_nodes = 1 << (param.depth-1);
     size_t n_max_splits = n_max_nodes * (long long)n_bins;
     size_t n_split = n_nodes_in_level * (long long)n_bins;
@@ -430,8 +433,14 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                         size_t last_hist_len = n_max_nodes/2;
                         size_t half_last_hist_len = n_max_nodes/4;
 
+                        if(max_trick_depth!=-1){
+                            last_hist_len = max_trick_nodes*2;
+                            half_last_hist_len = max_trick_nodes;
+
+                        }
+
                         SyncArray<float_type> gain(len_hist);
-                        SyncArray<int_float> best_idx_gain(n_nodes_in_level);
+                        SyncArray<int_float> best_idx_gain(2);
                         sp.resize(n_nodes_in_level);
                         //test
                         // SyncArray<GHPair> test(2*n_bins);
@@ -517,40 +526,61 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                     //    
                                     //});
 
-                                    //check result
-                                    // check_hist_res(hist.host_data() + nid0 * n_bins,test.host_data()+computed_hist_pos*n_bins,n_bins);
                                 
                             }
-
-                            //subtract
-                            auto t_copy_start = timer.now();
-                            {
-                                auto hist_data_computed = hist.device_data() + computed_hist_pos * n_bins;
-                                auto hist_data_to_compute = hist.device_data() + to_compute_hist_pos * n_bins;
-                                auto father_hist_data = last_hist.device_data() + (size_t)(nid0_to_substract / 2) * n_bins;
-                                
-                                if(level%2==0){
-                                    size_t st_pos = (((half_last_hist_len+(nid0_to_substract / 2)))%last_hist_len)* n_bins;
-                                    father_hist_data = last_hist.device_data() + st_pos ;
+                            
+                            if(max_trick_depth<0 || level<=max_trick_depth||(nid0_to_substract / 2)<max_trick_nodes){
+                                //subtract
+                                {
+                                    auto hist_data_computed = hist.device_data() + computed_hist_pos * n_bins;
+                                    auto hist_data_to_compute = hist.device_data() + to_compute_hist_pos * n_bins;
+                                    auto father_hist_data = last_hist.device_data() + (size_t)(nid0_to_substract / 2) * n_bins;
+                                    
+                                    if(level%2==0){
+                                        size_t st_pos = (((half_last_hist_len+(nid0_to_substract / 2)))%last_hist_len)* n_bins;
+                                        father_hist_data = last_hist.device_data() + st_pos ;
+                                    }
+                                    
+                                    device_loop(n_bins, [=]__device__(int i) {
+                                        hist_data_to_compute[i] = father_hist_data[i] - hist_data_computed[i];
+                                    });
+							    	
                                 }
-                                
-                                device_loop(n_bins, [=]__device__(int i) {
-                                    hist_data_to_compute[i] = father_hist_data[i] - hist_data_computed[i];
-                                });
-								
-	                        	//LOG(INFO)<<"compute hist feature 4447 "<<hist.host_data()[computed_hist_pos * n_bins+cut.cut_row_ptr.host_data()[4448]-1];
-	                        	//LOG(INFO)<<"subtract hist feature 4447 "<<hist.host_data()[to_compute_hist_pos * n_bins+cut.cut_row_ptr.host_data()[4448]-1];
+                            }
+                            else{
+                                //compute, if trick is not working
+                                int nid0 = nid0_to_substract;
+                                auto idx_begin = node_ptr.host_data()[nid0];
+                                auto idx_end = node_ptr.host_data()[nid0 + 1];
+                                auto hist_data = hist.device_data() + to_compute_hist_pos*n_bins;
+
+                                cudaMemset(hist_data, 0, n_bins*sizeof(GHPair));
+
+                                device_loop_hist_csr_node((idx_end - idx_begin),csr_row_ptr_data, [=]__device__(int i,int current_pos,int stride){
+                                    int iid = node_idx_data[i+idx_begin];
+                                    int begin = csr_row_ptr_data[iid];
+                                    int end = csr_row_ptr_data[iid+1];
+                                    for(int j = begin+current_pos;j<end;j+=stride){
+                                        int bid = (int)csr_bin_id_data[j];
+                                        const GHPair src = gh_data[iid];
+                                        GHPair &dest = hist_data[bid];
+                                        if(src.h!= 0){
+                                            atomicAdd(&dest.h, src.h);
+                                        }
+                                        if(src.g!= 0){
+                                            atomicAdd(&dest.g, src.g);
+                                        }
+                                    }
+                                },n_block);
+
                             }
                             TEND(hist)
                             total_hist_time+=TINT(hist);
-                            auto t_copy_end = timer.now();
-                            std::chrono::duration<double> cp_used_time = t_copy_end - t_copy_start;
-                            this->total_copy_time += cp_used_time.count();
 //                            PERFORMANCE_CHECKPOINT(timerObj);
 
                             //设计last_hist的拷贝策略
 
-                            if(level<(param.depth-1)){
+                            if((level<(param.depth-1) && max_trick_depth==-1)||(level<max_trick_depth)){
                                 if(level%2==0){
                                     //even level
                                     // LOG(INFO)<<"start_pos in even level "<<2*i;
@@ -570,6 +600,17 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                         cudaMemcpy(last_hist.device_data(),hist.device_data()+n_bins, n_bins*sizeof(GHPair), cudaMemcpyDefault);
                                     }
                                 }
+                            }
+                            //parent array not enough, part nodes use trick
+                            else if(level<(param.depth-1) && level>=max_trick_depth && 2*i<max_trick_nodes){ 
+                                if(level%2==0){
+                                    cudaMemcpy(last_hist.device_data()+(size_t)2*i*n_bins, hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                }
+                                else{
+                                    size_t start_pos = (half_last_hist_len+2*i)*n_bins;
+                                    cudaMemcpy(last_hist.device_data()+start_pos,hist.device_data(), 2*n_bins*sizeof(GHPair), cudaMemcpyDefault);
+                                }
+                                
                             }
 
 
@@ -667,7 +708,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
                                         thrust::equal_to<int>(),
                                         arg_abs_max
                                 );
-                                LOG(DEBUG) << n_split;
                                 LOG(DEBUG) << "best rank & gain = " << best_idx_gain;
                             }
 
@@ -777,8 +817,25 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             cut[device_id].get_cut_points2(shards[device_id].columns, param.max_num_bin, n_instances);
         else
             cut[device_id].get_cut_points3(shards[device_id].columns, param.max_num_bin, n_instances);
-        last_hist[device_id].resize((1 << (param.depth-2)) * cut[device_id].cut_points_val.size());
-        LOG(INFO)<<"last hist size is "<<((1 << (param.depth-2)) * cut[device_id].cut_points_val.size())*8/1e9;
+        
+        size_t free_byte,total_byte;
+        cudaError_t cuda_status = cudaMemGetInfo(&free_byte, &total_byte);
+        LOG(INFO)<<"free memory now is "<<free_byte / (1024.0 * 1024.0*1024) << " GB";
+        
+        size_t need_size = (1 << (param.depth-2)) * cut[device_id].cut_points_val.size();
+        LOG(INFO)<<"last hist size is "<<need_size*8/(1024*1024*1024.0)<<"GB";
+        
+        if(need_size*8>free_byte)
+        {
+            size_t max_trick_depth = log2(free_byte/(cut[device_id].cut_points_val.size()*8));
+            LOG(INFO)<<"support max trick depth is "<<max_trick_depth;
+            shards[device_id].columns.max_trick_depth = max_trick_depth;
+            //half of the max nodes
+            shards[device_id].columns.max_trick_nodes = 1<<(max_trick_depth-1);
+            need_size = (1<<max_trick_depth)* cut[device_id].cut_points_val.size(); 
+        }
+        LOG(INFO)<<"real last hist size is "<<need_size*8/(1024*1024*1024.0)<<"GB";
+        last_hist[device_id].resize(need_size);
    });
     get_bin_ids();
     for (int i = 0; i < param.n_device; ++i) {

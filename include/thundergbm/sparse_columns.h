@@ -24,6 +24,9 @@ public:
     SyncArray<int> csr_row_ptr;
     SyncArray<int> csr_col_idx;
 
+    int max_trick_depth = -1;
+    int max_trick_nodes = -1;
+
     int n_column;
     int n_row;
     int column_offset;
