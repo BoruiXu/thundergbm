@@ -831,8 +831,10 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
             LOG(INFO)<<"support max trick depth is "<<max_trick_depth;
             shards[device_id].columns.max_trick_depth = max_trick_depth;
             //half of the max nodes
-            shards[device_id].columns.max_trick_nodes = 1<<(max_trick_depth-1);
-            need_size = (1<<max_trick_depth)* cut[device_id].cut_points_val.size(); 
+            //shards[device_id].columns.max_trick_nodes = 1<<(max_trick_depth-1);
+            //need_size = (1<<max_trick_depth)* cut[device_id].cut_points_val.size(); 
+            shards[device_id].columns.max_trick_nodes = free_byte/(cut[device_id].cut_points_val.size()*8)/2;
+            need_size = shards[device_id].columns.max_trick_nodes*2* cut[device_id].cut_points_val.size(); 
         }
         LOG(INFO)<<"real last hist size is "<<need_size*8/(1024*1024*1024.0)<<"GB";
         last_hist[device_id].resize(need_size);
