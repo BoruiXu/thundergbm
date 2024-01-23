@@ -528,7 +528,6 @@ void HistTreeBuilder::find_split(int level, int device_id) {
 
                                 
                             }
-                            
                             if(max_trick_depth<0 || level<=max_trick_depth||(nid0_to_substract / 2)<max_trick_nodes){
                                 //subtract
                                 {
@@ -821,6 +820,8 @@ void HistTreeBuilder::init(const DataSet &dataset, const GBMParam &param) {
         size_t free_byte,total_byte;
         cudaError_t cuda_status = cudaMemGetInfo(&free_byte, &total_byte);
         LOG(INFO)<<"free memory now is "<<free_byte / (1024.0 * 1024.0*1024) << " GB";
+        //keep some extra memory
+        free_byte = free_byte - (size_t)3*1024*1024*1024;
         
         size_t need_size = (1 << (param.depth-2)) * cut[device_id].cut_points_val.size();
         LOG(INFO)<<"last hist size is "<<need_size*8/(1024*1024*1024.0)<<"GB";
